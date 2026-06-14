@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head><title>My Stats - $STORE Community</title>
+<style>
+    body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+    .stats-card { background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; }
+    input, button { padding: 0.5rem; margin: 0.5rem 0; }
+</style>
+</head>
+<body>
+<h1>📊 My Community Stats</h1>
+<div>
+    <label>Your User ID (UUID):</label>
+    <input type="text" id="userId" placeholder="e.g., 4beebdef-a359-4578-825c-0cfa9269fa66" style="width: 100%;">
+    <button onclick="loadStats()">Load Stats</button>
+</div>
+<div id="stats" class="stats-card">Enter your user ID to see stats.</div>
+<script>
+    async function loadStats() {
+        const userId = document.getElementById('userId').value.trim();
+        if (!userId) return;
+        const res = await fetch(`/api/community/stats/${userId}`);
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('stats').innerHTML = `
+                <p><strong>Bugs Reported:</strong> ${data.bugs_reported}</p>
+                <p><strong>Bugs Fixed:</strong> ${data.bugs_fixed}</p>
+                <p><strong>Bounties Claimed:</strong> ${data.bounties_claimed}</p>
+                <p><strong>Bounties Completed:</strong> ${data.bounties_completed}</p>
+                <p><strong>Reputation Score:</strong> ${data.reputation_score}</p>
+                <p><strong>Level:</strong> ${data.level}</p>
+                <p><strong>Badges:</strong> ${data.badges || 'None'}</p>
+            `;
+        } else {
+            document.getElementById('stats').innerHTML = `<p>Error: ${data.error}</p>`;
+        }
+    }
+</script>
+</body>
+</html>
