@@ -1,264 +1,261 @@
+# web/api/community_api.py
+"""
+Community API - Link submissions, voting, and knowledge base.
+"""
+
 from flask import Blueprint, request, jsonify
-from sqlalchemy import func
-from points_service.points_api import get_db_session, get_user_points
-from core.models.community import BugReport, Bounty, UserCommunityStats, BugStatus, BountyStatus
+from core.unified_system.search_engine import search_engine
+from core.modes.mode_manager import mode_manager
+from core.content.web_scraper import scrape_and_update_context
+import logging
 from datetime import datetime
-import uuid
+from core.content.link_moderator import LinkModerator
+
+logger = logging.getLogger(__name__)
 
 community_bp = Blueprint('community', __name__, url_prefix='/api/community')
+moderator = LinkModerator()
 
-def update_user_stats(session, user_id):
-    """Recalc or update user stats for community."""
-    stats = session.query(UserCommunityStats).filter_by(user_id=user_id).first()
-    if not stats:
-        stats = UserCommunityStats(user_id=user_id)
-        session.add(stats)
-    # Count bugs reported by user
-    reported = session.query(BugReport).filter_by(user_id=user_id).count()
-    # Count bugs fixed by user
-    fixed = session.query(BugReport).filter_by(fixed_by=user_id, status=BugStatus.FIXED).count()
-    # Bounties claimed and completed
-    claimed = session.query(Bounty).filter_by(claimed_by=user_id).count()
-    completed = session.query(Bounty).filter_by(claimed_by=user_id, status=BountyStatus.COMPLETED).count()
-    stats.bugs_reported = reported
-    stats.bugs_fixed = fixed
-    stats.bounties_claimed = claimed
-    stats.bounties_completed = completed
-    # Reputation could be sum of bounty points earned
-    # For simplicity, we'll update on bounty completion separately
-    session.commit()
-    return stats
-
-# ---------- Bug Reports ----------
-@community_bp.route('/bugs', methods=['GET'])
-def list_bugs():
-    session = get_db_session()
-    bugs = session.query(BugReport).order_by(BugReport.created_at.desc()).all()
-    session.close()
-    return jsonify([{
-        'id': str(b.id),
-        'title': b.title,
-        'description': b.description,
-        'status': b.status.value,
-        'severity': b.severity,
-        'bounty_points': b.bounty_points,
-        'created_at': b.created_at.isoformat(),
-        'fixed_by': str(b.fixed_by) if b.fixed_by else None,
-        'reporter_id': str(b.user_id)
-    } for b in bugs])
-
-@community_bp.route('/bugs', methods=['POST'])
-def create_bug():
+@community_bp.route('/link/submit', methods=['POST'])
+def submit_link():
+    """
+    Submit a community link with safety checks and user permission validation.
+    """
     data = request.get_json()
-    required = ['user_id', 'title', 'description']
-    if not all(k in data for k in required):
-        return jsonify({'error': 'missing fields'}), 400
-    try:
-        user_uuid = uuid.UUID(data['user_id'])
-    except:
-        return jsonify({'error': 'invalid user_id'}), 400
-    session = get_db_session()
-    # Check if user exists in points system (create if not)
-    get_user_points(session, user_uuid)
-    bug = BugReport(
-        user_id=user_uuid,
-        title=data['title'],
-        description=data['description'],
-        severity=data.get('severity', 'normal'),
-        bounty_points=data.get('bounty_points', 0),
-        error_report_path=data.get('error_report_path')
+    user_id = data.get('user_id')
+    url = data.get('url')
+    title = data.get('title')
+    description = data.get('description', '')
+    tags = data.get('tags', [])
+
+    if not user_id or not url:
+        return jsonify({'error': 'user_id and url required'}), 400
+
+    # ------------------------------------------------------------------
+    # 1. Check user permission (paid tier / trust level)
+    # ------------------------------------------------------------------
+    can_submit, reason = moderator.check_user_can_submit(user_id)
+    if not can_submit and reason == "requires_moderation":
+        # Queue for manual review (no automatic publishing)
+        queue_link(user_id, url, title, description, tags)
+        return jsonify({
+            'success': True,
+            'moderated': True,
+            'message': 'Link submitted for review. It will appear once approved.'
+        })
+    elif not can_submit:
+        return jsonify({
+            'error': 'You need a higher trust level or subscription to submit links.',
+            'reason': reason
+        }), 403
+
+    # ------------------------------------------------------------------
+    # 2. Scrape the URL to get metadata (if title missing)
+    # ------------------------------------------------------------------
+    if not title:
+        scraped = scrape_and_update_context(user_id, url, mode_manager)
+        title = scraped.get('title', url)
+        if not description and scraped.get('description'):
+            description = scraped.get('description')
+
+    # ------------------------------------------------------------------
+    # 3. Moderate the content (NSFW, toxicity, CSAM, unsafe URL)
+    # ------------------------------------------------------------------
+    # Collect any image URLs from the scraped content (if available)
+    image_urls = scraped.get('og_image', []) if 'scraped' in locals() else []
+    safety = moderator.moderate_link(url, title, description, image_urls)
+
+    if not safety['approved']:
+        if 'csam_detected' in safety['issues']:
+            # Immediate block and report (legal requirement)
+            moderator.report_to_authorities(user_id, url)
+            return jsonify({'error': 'Content blocked and reported.'}), 400
+        elif 'unsafe_url' in safety['issues']:
+            return jsonify({'error': 'This URL is known to be unsafe.'}), 400
+        else:
+            return jsonify({
+                'error': 'Content failed safety checks.',
+                'issues': safety['issues']
+            }), 400
+
+    # ------------------------------------------------------------------
+    # 4. Generate unique ID and store the link
+    # ------------------------------------------------------------------
+    link_id = hashlib.md5(f"{url}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+
+    link_data = {
+        'id': link_id,
+        'url': url,
+        'title': title,
+        'description': description,
+        'tags': tags,
+        'submitted_by': user_id,
+        'votes': 0,
+        'vote_count': 0,
+        'created_at': datetime.now().isoformat(),
+        'type': 'community_link',
+        'moderated': False,          # auto-approved
+        'approved_at': datetime.now().isoformat()
+    }
+
+    # Index in search engine
+    search_engine.index_community_link(
+        link_id=link_id,
+        url=url,
+        title=title,
+        description=description,
+        tags=tags
     )
-    session.add(bug)
-    session.commit()
-    # Update stats
-    update_user_stats(session, user_uuid)
-    session.close()
-    return jsonify({'message': 'Bug report created', 'id': str(bug.id)}), 201
 
-@community_bp.route('/bugs/<bug_id>/claim', methods=['POST'])
-def claim_bug(bug_id):
+    # Store in JSON for vote tracking
+    links_file = Path("data/community_links.json")
+    if links_file.exists():
+        with open(links_file, 'r') as f:
+            links = json.load(f)
+    else:
+        links = []
+    links.append(link_data)
+    with open(links_file, 'w') as f:
+        json.dump(links, f, indent=2)
+
+    return jsonify({'success': True, 'link': link_data})
+
+
+# ------------------------------------------------------------------
+# Helper: Queue link for manual review (for free / untrusted users)
+# ------------------------------------------------------------------
+def queue_link(user_id, url, title, description, tags):
+    """Store link in a moderation queue instead of publishing immediately."""
+    queue_file = Path("data/moderation/pending_links.json")
+    queue_file.parent.mkdir(parents=True, exist_ok=True)
+
+    entry = {
+        'user_id': user_id,
+        'url': url,
+        'title': title,
+        'description': description,
+        'tags': tags,
+        'submitted_at': datetime.now().isoformat(),
+        'status': 'pending'
+    }
+
+    if queue_file.exists():
+        with open(queue_file, 'r') as f:
+            queue = json.load(f)
+    else:
+        queue = []
+    queue.append(entry)
+    with open(queue_file, 'w') as f:
+        json.dump(queue, f, indent=2)
+        
+@community_bp.route('/link/vote', methods=['POST'])
+def vote_link():
+    """
+    Upvote or downvote a community link.
+    Body: { "user_id": "...", "link_id": "...", "vote": "up" or "down" }
+    """
     data = request.get_json()
     user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
-    try:
-        bug_uuid = uuid.UUID(bug_id)
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid UUID'}), 400
-    session = get_db_session()
-    bug = session.query(BugReport).filter_by(id=bug_uuid).first()
-    if not bug:
-        session.close()
-        return jsonify({'error': 'Bug not found'}), 404
-    if bug.status != BugStatus.OPEN:
-        session.close()
-        return jsonify({'error': f'Bug already {bug.status.value}'}), 400
-    # Optionally require the user to have enough points or just allow
-    bug.status = BugStatus.CLAIMED
-    bug.fixed_by = user_uuid
-    session.commit()
-    # Update stats
-    update_user_stats(session, user_uuid)
-    session.close()
-    return jsonify({'message': 'Bug claimed'}), 200
+    link_id = data.get('link_id')
+    vote = data.get('vote')  # 'up' or 'down'
 
-@community_bp.route('/bugs/<bug_id>/resolve', methods=['POST'])
-def resolve_bug(bug_id):
-    data = request.get_json()
-    user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
-    try:
-        bug_uuid = uuid.UUID(bug_id)
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid UUID'}), 400
-    session = get_db_session()
-    bug = session.query(BugReport).filter_by(id=bug_uuid).first()
-    if not bug:
-        session.close()
-        return jsonify({'error': 'Bug not found'}), 404
-    if bug.status != BugStatus.CLAIMED or bug.fixed_by != user_uuid:
-        session.close()
-        return jsonify({'error': 'Bug not claimed by you or not claimed'}), 400
-    bug.status = BugStatus.FIXED
-    bug.resolved_at = datetime.utcnow()
-    # Award bounty points to the fixer
-    if bug.bounty_points > 0:
-        user = get_user_points(session, user_uuid)
-        user.balance += bug.bounty_points
-        user.lifetime_earned += bug.bounty_points
-        from core.models.points import RewardLog  # adjust import if needed
-        log = RewardLog(user_id=user_uuid, amount=bug.bounty_points, reason=f"Bounty for fixing bug {bug.id}")
-        session.add(log)
-    session.commit()
-    update_user_stats(session, user_uuid)
-    session.close()
-    return jsonify({'message': 'Bug resolved, bounty awarded'}), 200
+    if not user_id or not link_id or vote not in ['up', 'down']:
+        return jsonify({'error': 'user_id, link_id, and vote (up/down) required'}), 400
 
-# ---------- Bounties ----------
-@community_bp.route('/bounties', methods=['GET'])
-def list_bounties():
-    session = get_db_session()
-    bounties = session.query(Bounty).filter_by(status=BountyStatus.OPEN).order_by(Bounty.created_at.desc()).all()
-    session.close()
-    return jsonify([{
-        'id': str(b.id),
-        'title': b.title,
-        'description': b.description,
-        'points_reward': b.points_reward,
-        'creator_id': str(b.creator_id),
-        'created_at': b.created_at.isoformat()
-    } for b in bounties])
+    from pathlib import Path
+    import json
 
-@community_bp.route('/bounties', methods=['POST'])
-def create_bounty():
-    data = request.get_json()
-    required = ['creator_id', 'title', 'description', 'points_reward']
-    if not all(k in data for k in required):
-        return jsonify({'error': 'missing fields'}), 400
-    try:
-        creator_uuid = uuid.UUID(data['creator_id'])
-    except:
-        return jsonify({'error': 'invalid creator_id'}), 400
-    # Check if creator has enough points (if points_reward > 0)
-    session = get_db_session()
-    user = get_user_points(session, creator_uuid)
-    points_reward = int(data['points_reward'])
-    if points_reward < 0:
-        session.close()
-        return jsonify({'error': 'points_reward must be non-negative'}), 400
-    if user.balance < points_reward:
-        session.close()
-        return jsonify({'error': 'Insufficient points to create this bounty'}), 400
-    # Reserve points by deducting them? Or deduct only when claimed/completed? We'll deduct at creation.
-    user.balance -= points_reward
-    bounty = Bounty(
-        creator_id=creator_uuid,
-        title=data['title'],
-        description=data['description'],
-        points_reward=points_reward,
-        status=BountyStatus.OPEN
-    )
-    session.add(bounty)
-    session.commit()
-    update_user_stats(session, creator_uuid)
-    session.close()
-    return jsonify({'message': 'Bounty created', 'id': str(bounty.id)}), 201
+    links_file = Path("data/community_links.json")
+    if not links_file.exists():
+        return jsonify({'error': 'No links found'}), 404
 
-@community_bp.route('/bounties/<bounty_id>/claim', methods=['POST'])
-def claim_bounty(bounty_id):
-    data = request.get_json()
-    user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
-    try:
-        bounty_uuid = uuid.UUID(bounty_id)
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid UUID'}), 400
-    session = get_db_session()
-    bounty = session.query(Bounty).filter_by(id=bounty_uuid).first()
-    if not bounty or bounty.status != BountyStatus.OPEN:
-        session.close()
-        return jsonify({'error': 'Bounty not found or not open'}), 404
-    bounty.status = BountyStatus.CLAIMED
-    bounty.claimed_by = user_uuid
-    bounty.claimed_at = datetime.utcnow()
-    session.commit()
-    update_user_stats(session, user_uuid)
-    session.close()
-    return jsonify({'message': 'Bounty claimed'}), 200
+    with open(links_file, 'r') as f:
+        links = json.load(f)
 
-@community_bp.route('/bounties/<bounty_id>/complete', methods=['POST'])
-def complete_bounty(bounty_id):
-    data = request.get_json()
-    user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'user_id required'}), 400
-    try:
-        bounty_uuid = uuid.UUID(bounty_id)
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid UUID'}), 400
-    session = get_db_session()
-    bounty = session.query(Bounty).filter_by(id=bounty_uuid).first()
-    if not bounty or bounty.status != BountyStatus.CLAIMED or bounty.claimed_by != user_uuid:
-        session.close()
-        return jsonify({'error': 'Bounty not claimed by you or not claimable'}), 400
-    # Award points to the claimer (points already deducted from creator, now add to claimer)
-    user = get_user_points(session, user_uuid)
-    user.balance += bounty.points_reward
-    user.lifetime_earned += bounty.points_reward
-    from core.models.points import RewardLog
-    log = RewardLog(user_id=user_uuid, amount=bounty.points_reward, reason=f"Completed bounty: {bounty.title}")
-    session.add(log)
-    bounty.status = BountyStatus.COMPLETED
-    bounty.completed_at = datetime.utcnow()
-    session.commit()
-    update_user_stats(session, user_uuid)
-    session.close()
-    return jsonify({'message': 'Bounty completed, points awarded'}), 200
+    link = None
+    for l in links:
+        if l['id'] == link_id:
+            link = l
+            break
 
-# ---------- User Stats ----------
-@community_bp.route('/stats/<user_id>', methods=['GET'])
-def get_user_stats(user_id):
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid user_id'}), 400
-    session = get_db_session()
-    stats = session.query(UserCommunityStats).filter_by(user_id=user_uuid).first()
-    if not stats:
-        stats = UserCommunityStats(user_id=user_uuid)
-    session.close()
+    if not link:
+        return jsonify({'error': 'Link not found'}), 404
+
+    # Track user votes to prevent double voting
+    votes_file = Path("data/user_votes.json")
+    if votes_file.exists():
+        with open(votes_file, 'r') as f:
+            user_votes = json.load(f)
+    else:
+        user_votes = {}
+
+    user_key = f"{user_id}_{link_id}"
+    previous_vote = user_votes.get(user_key)
+
+    # Adjust vote count
+    if vote == 'up':
+        if previous_vote == 'up':
+            # Remove vote
+            link['votes'] -= 1
+            link['vote_count'] -= 1
+            del user_votes[user_key]
+        elif previous_vote == 'down':
+            # Switch from down to up (+2 net)
+            link['votes'] += 2
+            # vote_count unchanged (still one vote)
+            user_votes[user_key] = 'up'
+        else:
+            # New upvote
+            link['votes'] += 1
+            link['vote_count'] += 1
+            user_votes[user_key] = 'up'
+    else:  # down
+        if previous_vote == 'down':
+            # Remove vote
+            link['votes'] += 1  # remove the -1 (so +1)
+            link['vote_count'] -= 1
+            del user_votes[user_key]
+        elif previous_vote == 'up':
+            # Switch from up to down (-2 net)
+            link['votes'] -= 2
+            user_votes[user_key] = 'down'
+        else:
+            # New downvote
+            link['votes'] -= 1
+            link['vote_count'] += 1
+            user_votes[user_key] = 'down'
+
+    # Save updated links and votes
+    with open(links_file, 'w') as f:
+        json.dump(links, f, indent=2)
+    with open(votes_file, 'w') as f:
+        json.dump(user_votes, f, indent=2)
+
     return jsonify({
-        'bugs_reported': stats.bugs_reported,
-        'bugs_fixed': stats.bugs_fixed,
-        'bounties_claimed': stats.bounties_claimed,
-        'bounties_completed': stats.bounties_completed,
-        'reputation_score': stats.reputation_score,
-        'level': stats.level,
-        'badges': stats.badges
+        'success': True,
+        'link_id': link_id,
+        'votes': link['votes'],
+        'vote_count': link['vote_count']
     })
+
+
+@community_bp.route('/links', methods=['GET'])
+def get_links():
+    """Get all community links, optionally sorted by votes."""
+    sort_by = request.args.get('sort', 'votes')  # votes, newest
+    from pathlib import Path
+    import json
+
+    links_file = Path("data/community_links.json")
+    if not links_file.exists():
+        return jsonify({'links': []})
+
+    with open(links_file, 'r') as f:
+        links = json.load(f)
+
+    if sort_by == 'votes':
+        links.sort(key=lambda x: x.get('votes', 0), reverse=True)
+    elif sort_by == 'newest':
+        links.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+    return jsonify({'links': links})
