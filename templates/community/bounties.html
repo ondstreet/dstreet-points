@@ -1,1 +1,45 @@
 
+<!DOCTYPE html>
+<html>
+<head><title>Bounties - $STORE Community</title>
+<style>
+    body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+    .bounty { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; }
+    .claim-btn { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>💰 Open Bounties</h1>
+<div id="bounties-list">Loading...</div>
+<script>
+    async function loadBounties() {
+        const res = await fetch('/api/community/bounties');
+        const bounties = await res.json();
+        const container = document.getElementById('bounties-list');
+        if (!bounties.length) { container.innerHTML = '<p>No open bounties.</p>'; return; }
+        container.innerHTML = bounties.map(b => `
+            <div class="bounty">
+                <h3>${b.title}</h3>
+                <p>${b.description}</p>
+                <p><strong>Reward:</strong> ${b.points_reward} points</p>
+                <button class="claim-btn" data-id="${b.id}">Claim Bounty</button>
+            </div>
+        `).join('');
+        document.querySelectorAll('.claim-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const userId = prompt("Enter your user ID (UUID):");
+                if (!userId) return;
+                const res = await fetch(`/api/community/bounties/${btn.dataset.id}/claim`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                alert(data.message || data.error);
+                if (res.ok) loadBounties();
+            });
+        });
+    }
+    loadBounties();
+</script>
+</body>
+</html>
