@@ -1,0 +1,182 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toonedoutframes"
+version = "0.1.0"
+description = "Video to Cartoon Animation Pipeline"
+authors = [{name = "Developer"}]
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["video", "cartoon", "animation", "ai", "ffmpeg", "opencv"]
+dependencies = [
+    # Core video/image processing (no compilation needed)
+    "opencv-python>=4.8.0",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "moviepy>=1.0.3",
+    "Flask>=3.0.0",
+    "Flask-CORS>=4.0.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+    # TVC / sync / web (lightweight)
+    "requests>=2.25",
+    "apscheduler>=3.9",
+    "zfec>=1.6",
+    "croniter>=1.3",
+    "python-dotenv>=0.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "black>=23.0.0",
+    "mypy>=1.5.0",
+    "pylint>=3.0.0",
+    "python-lsp-server>=1.7.0",
+    "ipython>=8.12.0",
+    "jupyter>=1.0.0",
+]
+blender = ["bpy>=1.0.0"]
+audio = [
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "pydub>=0.25.1",
+    "scipy>=1.10.0",
+    "audioread>=3.0.0",
+    "resampy>=0.4.0",
+    "numba>=0.57.0",
+    "pooch>=1.7.0",
+    "pyaudio>=0.2.11",
+    "webrtcvad>=2.0.10",
+    "seaborn>=0.12.0",
+]
+vision = [
+    "deepface>=0.0.79",
+    "tensorflow>=2.13.0",
+    "keras>=2.13.0",
+    "mediapipe>=0.10.0",
+]
+full = ["toonedoutframes[dev,blender,audio,vision]"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/toonedoutframes"
+Documentation = "https://toonedoutframes.readthedocs.io"
+Repository = "https://github.com/yourusername/toonedoutframes"
+
+[project.scripts]
+toonedoutframes = "cli.main:main"
+toonedoutframes-web = "web.app:main"
+toonedoutframes-dashboard = "visualizations.dashboards.web_dashboard:main"
+toonedoutframes-analyze-audio = "core.ai_video.audio.cli:main"
+toonedoutframes-detect-emotion = "core.ai_video.vision.cli:main"
+tvc = "tvc.tvc:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "cli*", "scripts*", "visualizations*", "web_dashboard*", "tvc*"]
+exclude = ["tests*", "data*", "docs*"]
+namespaces = true
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.pylance]
+pythonVersion = "3.11"
+pythonPlatform = "Darwin"
+typeCheckingMode = "basic"
+reportAttributeAccessIssue = false
+reportGeneralTypeIssues = "none"
+include = ["scripts", "cli", "core", "visualizations", "web_dashboard"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Darwin"
+typeCheckingMode = "basic"
+venv = "base"
+venvPath = "/Users/dixiejones/miniconda3/envs"
+include = ["scripts", "cli", "core", "visualizations", "web_dashboard"]
+exclude = [
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/.venv",
+    "**/node_modules",
+    "**/backup_*",
+    "**/backup*/**",
+    "**/*backup*",
+    "**/backup_before_*",
+    "**/.*",
+    "**/dist",
+    "**/build",
+    "**/*.egg-info",
+    "**/.git",
+    "**/.vscode",
+    "**/.idea"
+]
+ignore = [
+    "scripts/integration/__init__.py",
+    "**/__pycache__/**",
+    "**/backup_*/**",
+    "**/backup_before_*/**",
+    "**/.*/**"
+]
+extraPaths = [
+    "./scripts",
+    "./scripts/integration",
+    "./web_dashboard",
+    "./core",
+    "./cli",
+    "./visualizations",
+    "/Users/dixiejones/miniconda3/lib/python3.11/site-packages"
+]
+reportMissingImports = "warning"
+reportMissingTypeStubs = false
+reportPrivateImportUsage = false
+reportDuplicateImport = false
+reportPropertyTypeMismatch = false
+reportOptionalSubscript = false
+reportOptionalMemberAccess = false
+reportUnusedImport = "warning"
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+reportUnusedVariable = "warning"
+reportAttributeAccessIssue = false
+reportGeneralTypeIssues = false
+reportOptionalIterable = false
+reportOptionalCall = false
+reportOptionalContextManager = false
+reportOptionalOperand = false
+stubPath = "./typings"
+
+[[tool.pyright.executionEnvironments]]
+root = "./web_dashboard"
+pythonVersion = "3.11"
+extraPaths = ["/Users/dixiejones/miniconda3/lib/python3.11/site-packages"]
+
+[[tool.pyright.executionEnvironments]]
+root = "./core"
+pythonVersion = "3.11"
+extraPaths = ["/Users/dixiejones/miniconda3/lib/python3.11/site-packages"]
+
+[tool.pylance.flask]
+enable = true
+autoReload = true
+
+[tool.dev]
+dashboard_host = "0.0.0.0"
+dashboard_port = 8080
+debug_mode = true

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>$STORE Points Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 1rem;
+            background: #f5f7fb;
+            color: #1e293b;
+        }
+        h1, h2 { color: #0f172a; }
+        .card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid #e2e8f0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 1.5rem;
+        }
+        input, select, textarea, button {
+            width: 100%;
+            padding: 0.6rem;
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            font-size: 0.95rem;
+            font-family: inherit;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #2563eb; }
+        pre {
+            background: #f1f5f9;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-size: 0.85rem;
+        }
+        .status { margin-top: 1rem; }
+        .error { color: #dc2626; font-weight: 500; }
+        .success { color: #10b981; font-weight: 500; }
+        hr { margin: 1rem 0; }
+        .inline-group {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .inline-group input { flex: 1; margin-bottom: 0; }
+        .inline-group button { width: auto; margin-bottom: 0; }
+        .code-id {
+            font-family: monospace;
+            background: #eef2ff;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.4rem;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+<div style="background: #1e293b; padding: 1rem; margin-bottom: 2rem; border-radius: 0.5rem;">
+    <a href="/dashboard" style="color: white; margin-right: 1rem; text-decoration: none;">🏦 Points</a>
+    <a href="/community/bugs" style="color: white; margin-right: 1rem; text-decoration: none;">🐞 Bugs</a>
+    <a href="/community/bounties" style="color: white; margin-right: 1rem; text-decoration: none;">💰 Bounties</a>
+    <a href="/community/dashboard" style="color: white; text-decoration: none;">📊 My Stats</a>
+</div>
+
+<h1>🏦 $STORE Points System</h1>
+
+<div class="card">
+    <label>👤 Your User ID (UUID)</label>
+    <div class="inline-group">
+        <input type="text" id="userId" value="4beebdef-a359-4578-825c-0cfa9269fa66">
+        <button onclick="fetchBalance()">Check Balance</button>
+    </div>
+    <div id="balanceDisplay" class="status"></div>
+</div>
+
+<div class="grid">
+    <!-- Stake -->
+    <div class="card">
+        <h2>📈 Stake Points</h2>
+        <input type="number" id="stakeAmount" placeholder="Amount" step="1" value="10">
+        <input type="number" id="stakeDays" placeholder="Lock days (e.g., 30)" value="30">
+        <button onclick="stake()">Stake</button>
+        <div id="stakeResult"></div>
+    </div>
+
+    <!-- Unstake -->
+    <div class="card">
+        <h2>🔓 Unstake</h2>
+        <input type="text" id="stakeId" placeholder="Stake ID (auto-filled after stake)">
+        <button onclick="unstake()">Unstake</button>
+        <div id="unstakeResult"></div>
+    </div>
+
+    <!-- Create Proposal -->
+    <div class="card">
+        <h2>📜 Create Proposal</h2>
+        <input type="text" id="propTitle" placeholder="Title">
+        <textarea id="propDesc" rows="2" placeholder="Description"></textarea>
+        <input type="number" id="propHours" placeholder="Duration (hours)" value="72">
+        <button onclick="createProposal()">Create</button>
+        <div id="proposalResult"></div>
+    </div>
+
+    <!-- Vote -->
+    <div class="card">
+        <h2>🗳️ Vote on Proposal</h2>
+        <input type="text" id="voteProposalId" placeholder="Proposal ID (auto-filled after creation)">
+        <select id="voteChoice">
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+        </select>
+        <button onclick="vote()">Submit Vote</button>
+        <div id="voteResult"></div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📋 Active Proposals</h2>
+    <button onclick="listProposals()">Refresh Proposals</button>
+    <pre id="proposalsList">Click refresh to load proposals</pre>
+</div>
+
+
+
+<script>
+    const API_BASE = 'http://127.0.0.1:5000/api/points';
+
+    function getUserId() {
+        return document.getElementById('userId').value.trim();
+    }
+
+    async function fetchBalance() {
+        const userId = getUserId();
+        if (!userId) return showError('balanceDisplay', 'User ID required');
+        try {
+            const res = await fetch(`${API_BASE}/balance?user_id=${userId}`);
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('balanceDisplay').innerHTML = `
+                    <div class="success">✅ Balance: ${data.balance} points</div>
+                    <div>🏆 Lifetime earned: ${data.lifetime_earned}</div>
+                    <div>📅 Last claim: ${data.last_claim || 'never'}</div>
+                `;
+            } else {
+                showError('balanceDisplay', data.error || 'Failed to fetch balance');
+            }
+        } catch (err) {
+            showError('balanceDisplay', err.message);
+        }
+    }
+
+    async function stake() {
+        const userId = getUserId();
+        const amount = parseFloat(document.getElementById('stakeAmount').value);
+        const days = parseInt(document.getElementById('stakeDays').value);
+        if (!userId || isNaN(amount) || amount <= 0) {
+            return showError('stakeResult', 'Valid amount required');
+        }
+        try {
+            const res = await fetch(`${API_BASE}/stake`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, amount, days })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                let html = `<div class="success">✅ ${data.message}</div>`;
+                html += `<div>📊 APY: ${data.apy}%</div>`;
+                if (data.stake_id) {
+                    html += `<div>🔑 Stake ID: <strong class="code-id">${data.stake_id}</strong></div>`;
+                    document.getElementById('stakeId').value = data.stake_id;
+                } else {
+                    html += `<div class="error">⚠️ Warning: stake_id not returned by server. Update your /stake endpoint to include 'stake_id'.</div>`;
+                }
+                document.getElementById('stakeResult').innerHTML = html;
+                fetchBalance();
+            } else {
+                showError('stakeResult', data.error || 'Stake failed');
+            }
+        } catch (err) {
+            showError('stakeResult', err.message);
+        }
+    }
+
+    async function unstake() {
+        const userId = getUserId();
+        const stakeId = document.getElementById('stakeId').value.trim();
+        if (!userId || !stakeId) return showError('unstakeResult', 'User ID and Stake ID required');
+        try {
+            const res = await fetch(`${API_BASE}/unstake`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, stake_id: stakeId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('unstakeResult').innerHTML = `<div class="success">✅ ${data.message}</div>`;
+                fetchBalance();
+                document.getElementById('stakeId').value = '';
+            } else {
+                showError('unstakeResult', data.error || 'Unstake failed');
+            }
+        } catch (err) {
+            showError('unstakeResult', err.message);
+        }
+    }
+
+    async function createProposal() {
+        const userId = getUserId();
+        const title = document.getElementById('propTitle').value.trim();
+        const description = document.getElementById('propDesc').value.trim();
+        const duration_hours = parseInt(document.getElementById('propHours').value);
+        if (!userId || !title || !description) return showError('proposalResult', 'Title and description required');
+        try {
+            const res = await fetch(`${API_BASE}/governance/proposals`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ creator_id: userId, title, description, duration_hours })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const proposalId = data.id;
+                document.getElementById('proposalResult').innerHTML = `<div class="success">✅ Proposal created. ID: <strong class="code-id">${proposalId}</strong></div>`;
+                document.getElementById('voteProposalId').value = proposalId;
+                listProposals();
+            } else {
+                showError('proposalResult', data.error || 'Creation failed');
+            }
+        } catch (err) {
+            showError('proposalResult', err.message);
+        }
+    }
+
+    async function vote() {
+        const userId = getUserId();
+        const proposalId = document.getElementById('voteProposalId').value.trim();
+        const choice = document.getElementById('voteChoice').value;
+        if (!userId || !proposalId) return showError('voteResult', 'User ID and Proposal ID required');
+        try {
+            const res = await fetch(`${API_BASE}/governance/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, proposal_id: proposalId, choice })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('voteResult').innerHTML = `<div class="success">✅ Vote recorded (${choice}) with power ${data.voting_power || '?'}</div>`;
+                listProposals();
+            } else {
+                showError('voteResult', data.error || 'Vote failed');
+            }
+        } catch (err) {
+            showError('voteResult', err.message);
+        }
+    }
+
+    async function listProposals() {
+        try {
+            const res = await fetch(`${API_BASE}/governance/proposals`);
+            const data = await res.json();
+            if (res.ok) {
+                if (data.length === 0) {
+                    document.getElementById('proposalsList').innerText = 'No active proposals.';
+                } else {
+                    document.getElementById('proposalsList').innerHTML = JSON.stringify(data, null, 2);
+                }
+            } else {
+                document.getElementById('proposalsList').innerText = 'Error loading proposals: ' + (data.error || 'Unknown');
+            }
+        } catch (err) {
+            document.getElementById('proposalsList').innerText = err.message;
+        }
+    }
+
+    function showError(elementId, message) {
+        const el = document.getElementById(elementId);
+        el.innerHTML = `<div class="error">❌ ${message}</div>`;
+        setTimeout(() => {
+            if (el) el.innerHTML = '';
+        }, 4000);
+    }
+
+    // Load balance and proposals on page load
+    window.onload = () => {
+        fetchBalance();
+        listProposals();
+    };
+</script>
+</body>
+</html>

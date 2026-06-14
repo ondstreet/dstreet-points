@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Community Bug Tracker</title>
+    <style>
+        body { font-family: system-ui; background: #f5f7fb; padding: 2rem; }
+        .container { max-width: 1200px; margin: auto; }
+        .card { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .bug-item { border-bottom: 1px solid #e2e8f0; padding: 1rem 0; }
+        .status { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 1rem; font-size: 0.8rem; font-weight: bold; }
+        .open { background: #dc2626; color: white; }
+        .claimed { background: #f59e0b; color: white; }
+        .fixed { background: #10b981; color: white; }
+        button { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        .severity { margin-left: 1rem; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🐞 Community Bug Tracker</h1>
+    <div class="card">
+        <h2>Report a Bug</h2>
+        <input type="text" id="bugTitle" placeholder="Title">
+        <textarea id="bugDesc" rows="3" placeholder="Description"></textarea>
+        <select id="bugSeverity">
+            <option value="low">Low</option>
+            <option value="normal" selected>Normal</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+        </select>
+        <input type="number" id="bountyPoints" placeholder="Bounty points (optional)" value="0">
+        <button onclick="createBug()">Submit Bug</button>
+    </div>
+    <div class="card">
+        <h2>Open Bugs</h2>
+        <div id="bugsList">Loading...</div>
+    </div>
+</div>
+<script>
+    const API = '/api/community';
+    const userId = '4beebdef-a359-4578-825c-0cfa9269fa66'; // Replace with actual logged-in user
+    async function loadBugs() {
+        const res = await fetch(`${API}/bugs`);
+        const bugs = await res.json();
+        const container = document.getElementById('bugsList');
+        if (bugs.length === 0) {
+            container.innerHTML = '<p>No bugs reported yet.</p>';
+            return;
+        }
+        container.innerHTML = bugs.map(bug => `
+            <div class="bug-item">
+                <strong>${bug.title}</strong>
+                <span class="status ${bug.status}">${bug.status}</span>
+                <span class="severity">Severity: ${bug.severity}</span>
+                <p>${bug.description}</p>
+                <p>Bounty: ${bug.bounty_points} points</p>
+                <button onclick="claimBug('${bug.id}')">Claim Fix</button>
+                <button onclick="resolveBug('${bug.id}')">Mark Fixed</button>
+            </div>
+        `).join('');
+    }
+    async function createBug() {
+        const title = document.getElementById('bugTitle').value;
+        const description = document.getElementById('bugDesc').value;
+        const severity = document.getElementById('bugSeverity').value;
+        const bountyPoints = parseInt(document.getElementById('bountyPoints').value) || 0;
+        if (!title || !description) return alert('Title and description required');
+        const res = await fetch(`${API}/bugs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, title, description, severity, bounty_points: bountyPoints })
+        });
+        if (res.ok) {
+            alert('Bug reported');
+            loadBugs();
+        } else {
+            alert('Error');
+        }
+    }
+    async function claimBug(bugId) {
+        const res = await fetch(`${API}/bugs/${bugId}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        if (res.ok) { alert('Claimed!'); loadBugs(); }
+        else alert('Failed');
+    }
+    async function resolveBug(bugId) {
+        const res = await fetch(`${API}/bugs/${bugId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        if (res.ok) { alert('Resolved!'); loadBugs(); }
+        else alert('Failed');
+    }
+    loadBugs();
+</script>
+</body>
+</html>

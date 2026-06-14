@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dstreet-points
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run_points:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.2

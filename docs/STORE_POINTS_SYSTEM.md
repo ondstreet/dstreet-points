@@ -1,0 +1,3 @@
+# $STORE Points System (Centralised Prototype)
+
+... (paste the content from earlier) ...
