@@ -6,10 +6,8 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.ext.declarative import declarative_base
+from core.models.points import Base
 import enum
-
-Base = declarative_base()  # Use the same Base as points models if possible, but for now create new.
 
 class BugStatus(enum.Enum):
     OPEN = "open"
