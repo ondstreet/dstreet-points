@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from sqlalchemy import func
 from points_service.points_api import get_db_session, get_user_points
 from core.models.community import BugReport, Bounty, UserCommunityStats, BugStatus, BountyStatus
 from datetime import datetime
@@ -8,7 +7,6 @@ import uuid
 community_bp = Blueprint('community', __name__, url_prefix='/api/community')
 
 def update_user_stats(session, user_id):
-    """Recalc or update user stats for community."""
     stats = session.query(UserCommunityStats).filter_by(user_id=user_id).first()
     if not stats:
         stats = UserCommunityStats(user_id=user_id)
