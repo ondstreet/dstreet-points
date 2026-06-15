@@ -4,243 +4,14 @@ Community API – link submissions, voting, knowledge base,
 and bug tracking / bounties / user stats.
 """
 
-import hashlib
-import json
-import logging
-from pathlib import Path
+from flask import Blueprint, request, jsonify
+from sqlalchemy import func
+from points_service.points_api import get_db_session, get_user_points
+from core.models.community import BugReport, Bounty, UserCommunityStats, BugStatus, BountyStatus
 from datetime import datetime
 import uuid
 
-from flask import Blueprint, request, jsonify
-from sqlalchemy import func
-
-# Link submission modules
-from core.unified_system.search_engine import search_engine
-from core.modes.mode_manager import mode_manager
-from core.content.web_scraper import scrape_and_update_context
-from core.content.link_moderator import LinkModerator
-
-# Points / community models
-from points_service.points_api import get_db_session, get_user_points
-from core.models.community import BugReport, Bounty, UserCommunityStats, BugStatus, BountyStatus
-
-logger = logging.getLogger(__name__)
 community_bp = Blueprint('community', __name__, url_prefix='/api/community')
-moderator = LinkModerator()
-
-# ------------------------------------------------------------------
-# Link submission & voting (existing)
-# ------------------------------------------------------------------
-
-def queue_link(user_id, url, title, description, tags):
-    """Store link in a moderation queue instead of publishing immediately."""
-    queue_file = Path("data/moderation/pending_links.json")
-    queue_file.parent.mkdir(parents=True, exist_ok=True)
-
-    entry = {
-        'user_id': user_id,
-        'url': url,
-        'title': title,
-        'description': description,
-        'tags': tags,
-        'submitted_at': datetime.now().isoformat(),
-        'status': 'pending'
-    }
-
-    if queue_file.exists():
-        with open(queue_file, 'r') as f:
-            queue = json.load(f)
-    else:
-        queue = []
-    queue.append(entry)
-    with open(queue_file, 'w') as f:
-        json.dump(queue, f, indent=2)
-
-@community_bp.route('/link/submit', methods=['POST'])
-def submit_link():
-    """
-    Submit a community link with safety checks and user permission validation.
-    """
-    data = request.get_json()
-    user_id = data.get('user_id')
-    url = data.get('url')
-    title = data.get('title')
-    description = data.get('description', '')
-    tags = data.get('tags', [])
-
-    if not user_id or not url:
-        return jsonify({'error': 'user_id and url required'}), 400
-
-    can_submit, reason = moderator.check_user_can_submit(user_id)
-    if not can_submit and reason == "requires_moderation":
-        queue_link(user_id, url, title, description, tags)
-        return jsonify({
-            'success': True,
-            'moderated': True,
-            'message': 'Link submitted for review. It will appear once approved.'
-        })
-    elif not can_submit:
-        return jsonify({
-            'error': 'You need a higher trust level or subscription to submit links.',
-            'reason': reason
-        }), 403
-
-    if not title:
-        scraped = scrape_and_update_context(user_id, url, mode_manager)
-        title = scraped.get('title', url)
-        if not description and scraped.get('description'):
-            description = scraped.get('description')
-
-    image_urls = scraped.get('og_image', []) if 'scraped' in locals() else []
-    safety = moderator.moderate_link(url, title, description, image_urls)
-
-    if not safety['approved']:
-        if 'csam_detected' in safety['issues']:
-            moderator.report_to_authorities(user_id, url)
-            return jsonify({'error': 'Content blocked and reported.'}), 400
-        elif 'unsafe_url' in safety['issues']:
-            return jsonify({'error': 'This URL is known to be unsafe.'}), 400
-        else:
-            return jsonify({
-                'error': 'Content failed safety checks.',
-                'issues': safety['issues']
-            }), 400
-
-    link_id = hashlib.md5(f"{url}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
-
-    link_data = {
-        'id': link_id,
-        'url': url,
-        'title': title,
-        'description': description,
-        'tags': tags,
-        'submitted_by': user_id,
-        'votes': 0,
-        'vote_count': 0,
-        'created_at': datetime.now().isoformat(),
-        'type': 'community_link',
-        'moderated': False,
-        'approved_at': datetime.now().isoformat()
-    }
-
-    search_engine.index_community_link(
-        link_id=link_id,
-        url=url,
-        title=title,
-        description=description,
-        tags=tags
-    )
-
-    links_file = Path("data/community_links.json")
-    if links_file.exists():
-        with open(links_file, 'r') as f:
-            links = json.load(f)
-    else:
-        links = []
-    links.append(link_data)
-    with open(links_file, 'w') as f:
-        json.dump(links, f, indent=2)
-
-    return jsonify({'success': True, 'link': link_data})
-
-@community_bp.route('/link/vote', methods=['POST'])
-def vote_link():
-    """
-    Upvote or downvote a community link.
-    Body: { "user_id": "...", "link_id": "...", "vote": "up" or "down" }
-    """
-    data = request.get_json()
-    user_id = data.get('user_id')
-    link_id = data.get('link_id')
-    vote = data.get('vote')
-
-    if not user_id or not link_id or vote not in ['up', 'down']:
-        return jsonify({'error': 'user_id, link_id, and vote (up/down) required'}), 400
-
-    links_file = Path("data/community_links.json")
-    if not links_file.exists():
-        return jsonify({'error': 'No links found'}), 404
-
-    with open(links_file, 'r') as f:
-        links = json.load(f)
-
-    link = None
-    for l in links:
-        if l['id'] == link_id:
-            link = l
-            break
-
-    if not link:
-        return jsonify({'error': 'Link not found'}), 404
-
-    votes_file = Path("data/user_votes.json")
-    if votes_file.exists():
-        with open(votes_file, 'r') as f:
-            user_votes = json.load(f)
-    else:
-        user_votes = {}
-
-    user_key = f"{user_id}_{link_id}"
-    previous_vote = user_votes.get(user_key)
-
-    if vote == 'up':
-        if previous_vote == 'up':
-            link['votes'] -= 1
-            link['vote_count'] -= 1
-            del user_votes[user_key]
-        elif previous_vote == 'down':
-            link['votes'] += 2
-            user_votes[user_key] = 'up'
-        else:
-            link['votes'] += 1
-            link['vote_count'] += 1
-            user_votes[user_key] = 'up'
-    else:  # down
-        if previous_vote == 'down':
-            link['votes'] += 1
-            link['vote_count'] -= 1
-            del user_votes[user_key]
-        elif previous_vote == 'up':
-            link['votes'] -= 2
-            user_votes[user_key] = 'down'
-        else:
-            link['votes'] -= 1
-            link['vote_count'] += 1
-            user_votes[user_key] = 'down'
-
-    with open(links_file, 'w') as f:
-        json.dump(links, f, indent=2)
-    with open(votes_file, 'w') as f:
-        json.dump(user_votes, f, indent=2)
-
-    return jsonify({
-        'success': True,
-        'link_id': link_id,
-        'votes': link['votes'],
-        'vote_count': link['vote_count']
-    })
-
-@community_bp.route('/links', methods=['GET'])
-def get_links():
-    """Get all community links, optionally sorted by votes."""
-    sort_by = request.args.get('sort', 'votes')
-    links_file = Path("data/community_links.json")
-    if not links_file.exists():
-        return jsonify({'links': []})
-
-    with open(links_file, 'r') as f:
-        links = json.load(f)
-
-    if sort_by == 'votes':
-        links.sort(key=lambda x: x.get('votes', 0), reverse=True)
-    elif sort_by == 'newest':
-        links.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-
-    return jsonify({'links': links})
-
-# ------------------------------------------------------------------
-# Bug tracking & bounties (new)
-# ------------------------------------------------------------------
 
 def update_user_stats(session, user_id):
     """Recalc or update user stats for community."""
@@ -259,6 +30,7 @@ def update_user_stats(session, user_id):
     session.commit()
     return stats
 
+# ---------- Bug Reports ----------
 @community_bp.route('/bugs', methods=['GET'])
 def list_bugs():
     session = get_db_session()
@@ -287,7 +59,7 @@ def create_bug():
     except:
         return jsonify({'error': 'invalid user_id'}), 400
     session = get_db_session()
-    get_user_points(session, user_uuid)
+    get_user_points(session, user_uuid)  # ensure user exists
     bug = BugReport(
         user_id=user_uuid,
         title=data['title'],
@@ -355,6 +127,7 @@ def resolve_bug(bug_id):
     session.close()
     return jsonify({'message': 'Bug resolved, bounty awarded'}), 200
 
+# ---------- Bounties ----------
 @community_bp.route('/bounties', methods=['GET'])
 def list_bounties():
     session = get_db_session()
@@ -454,6 +227,7 @@ def complete_bounty(bounty_id):
     session.close()
     return jsonify({'message': 'Bounty completed, points awarded'}), 200
 
+# ---------- User Stats ----------
 @community_bp.route('/stats/<user_id>', methods=['GET'])
 def get_user_stats(user_id):
     try:
