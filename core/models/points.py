@@ -28,8 +28,8 @@ class VoteChoice(enum.Enum):
 class UserPoints(Base):
     """User's $STORE point balance and lifetime earnings."""
     __tablename__ = "user_points"
-
     user_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(50), unique=True, nullable=True)
     balance = Column(Integer, default=0, nullable=False)
     lifetime_earned = Column(Integer, default=0, nullable=False)
     last_claim = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
