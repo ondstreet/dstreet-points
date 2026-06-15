@@ -17,6 +17,20 @@ app.register_blueprint(community_bp, url_prefix='/api/community')
 def dashboard():
     return render_template('points_dashboard.html')
 
+
+@app.route('/community/bugs')
+def community_bugs():
+    return render_template('community/bugs.html')
+
+@app.route('/community/bounties')
+def community_bounties():
+    return render_template('community/bounties.html')
+
+@app.route('/community/dashboard')
+def community_dashboard():
+    return render_template('community/dashboard.html')
+
+
 # Create all database tables (points + community) in one go
 with app.app_context():
     from sqlalchemy import create_engine
