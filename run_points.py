@@ -1,5 +1,6 @@
 from flask import Flask, render_template
 from points_service.points_api import points_bp
+from core.api.feedback_api import feedback_api as feedback_bp
 from web.api.community_api import community_bp
 import os
 
@@ -11,6 +12,7 @@ os.makedirs('data', exist_ok=True)
 # Register blueprints
 app.register_blueprint(points_bp)
 app.register_blueprint(community_bp, url_prefix='/api/community')
+app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
 
 # ----- HTML page routes -----
 @app.route('/')
@@ -31,42 +33,27 @@ def community_dashboard():
     return render_template('community/dashboard.html')
 # ----------------------------
 
-# ----- Safe route printer (skips dynamic endpoints) -----
+# ----- Route printer that includes the development port -----
 def print_static_routes():
+    BASE_URL = "http://127.0.0.1:5000"
     print("\n" + "="*70)
-    print("🌐 STATIC ROUTES (clickable)")
+    print("🌐 HTML PAGES (clickable)")
     print("="*70)
+    seen_urls = set()
     with app.test_request_context():
         for rule in app.url_map.iter_rules():
-            # Skip dynamic routes that require parameters
+            # Only include routes that serve HTML pages (not /api/...)
+            if rule.rule.startswith('/api/'):
+                continue
             if rule.arguments:
                 continue
             if rule.endpoint == 'static':
                 continue
             methods = ','.join(rule.methods - {'HEAD', 'OPTIONS'})
-            # Manually build URL for static routes
-            if rule.endpoint == 'dashboard':
-                url = 'http://127.0.0.1:5000/dashboard'
-            elif rule.endpoint == 'community_bugs':
-                url = 'http://127.0.0.1:5000/community/bugs'
-            elif rule.endpoint == 'community_bounties':
-                url = 'http://127.0.0.1:5000/community/bounties'
-            elif rule.endpoint == 'community_dashboard':
-                url = 'http://127.0.0.1:5000/community/dashboard'
-            elif rule.endpoint == 'list_bugs':
-                url = 'http://127.0.0.1:5000/api/community/bugs'
-            elif rule.endpoint == 'list_bounties':
-                url = 'http://127.0.0.1:5000/api/community/bounties'
-            elif rule.endpoint == 'get_user_stats':
-                # This requires user_id, so skip or show pattern
+            url = f"{BASE_URL}{rule.rule}"
+            if url in seen_urls:
                 continue
-            else:
-                # For other static routes, use url_for
-                try:
-                    from flask import url_for
-                    url = url_for(rule.endpoint, _external=True)
-                except:
-                    continue
+            seen_urls.add(url)
             print(f"{methods:15} {url}")
     print("="*70 + "\n")
 
