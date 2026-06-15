@@ -1,9 +1,3 @@
-# web/api/community_api.py
-"""
-Community API – link submissions, voting, knowledge base,
-and bug tracking / bounties / user stats.
-"""
-
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func
 from points_service.points_api import get_db_session, get_user_points
@@ -59,7 +53,7 @@ def create_bug():
     except:
         return jsonify({'error': 'invalid user_id'}), 400
     session = get_db_session()
-    get_user_points(session, user_uuid)  # ensure user exists
+    get_user_points(session, user_uuid)
     bug = BugReport(
         user_id=user_uuid,
         title=data['title'],
