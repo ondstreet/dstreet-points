@@ -16,19 +16,37 @@
 <div class="container">
     <div class="card">
         <h1>📊 Community Stats Dashboard</h1>
-        <p>Enter your user ID to see your contribution stats.</p>
-        <input type="text" id="userId" placeholder="Your user ID (UUID)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
+        <p>Enter your user ID or registered name to see your contribution stats.</p>
+        <input type="text" id="userId" placeholder="User ID or name (e.g., alice)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
         <button onclick="loadStats()">Load My Stats</button>
         <div id="statsDisplay" style="margin-top: 1rem;"></div>
+    </div>
+    <div class="card">
+        <h2>🔍 Resolve a Name</h2>
+        <input type="text" id="resolveName" placeholder="Enter a registered name (e.g., alice)">
+        <button onclick="resolveName()">Resolve</button>
+        <pre id="resolveResult"></pre>
     </div>
 </div>
 
 <script>
     const API = '/api/community';
+    const POINTS_API = '/api/points';
 
     async function loadStats() {
-        const userId = document.getElementById('userId').value.trim();
-        if (!userId) return alert('Please enter a user ID');
+        let identifier = document.getElementById('userId').value.trim();
+        if (!identifier) return alert('Please enter a user ID or name');
+        let userId = identifier;
+        // If not a UUID, resolve via name registry
+        if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identifier)) {
+            const res = await fetch(`${POINTS_API}/names/resolve/${identifier}`);
+            if (!res.ok) {
+                document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Name not found or expired.</p>`;
+                return;
+            }
+            const data = await res.json();
+            userId = data.owner_id;
+        }
         const res = await fetch(`${API}/stats/${userId}`);
         const data = await res.json();
         if (res.ok) {
@@ -49,6 +67,24 @@
             document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
         }
     }
+
+    async function resolveName() {
+        const name = document.getElementById('resolveName').value.trim();
+        if (!name) return alert('Enter a name');
+        const res = await fetch(`${POINTS_API}/names/resolve/${name}`);
+        const data = await res.json();
+        const pre = document.getElementById('resolveResult');
+        if (res.ok) {
+            pre.innerHTML = `Owner: ${data.owner_id}\nUsername: ${data.username || 'N/A'}\nExpires: ${new Date(data.expires_at).toLocaleDateString()}`;
+        } else {
+            pre.innerHTML = `Error: ${data.error}`;
+        }
+    }
+
+    // Load stats on page load for the default user
+    window.onload = () => {
+        loadStats();
+    };
 </script>
 </body>
 </html>
