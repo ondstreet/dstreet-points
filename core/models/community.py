@@ -4,6 +4,7 @@ Uses same SQLAlchemy Base as points models (shared).
 """
 import uuid
 from datetime import datetime
+from sqlalchemy.orm import relationship
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from core.models.points import Base
@@ -60,3 +61,19 @@ class UserCommunityStats(Base):
     level = Column(Integer, default=1)
     badges = Column(Text, default="[]")                # JSON list of badge strings
     last_activity = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NameRegistry(Base):
+    """Registered human-readable names mapped to user IDs."""
+    __tablename__ = "name_registry"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    owner_id = Column(PG_UUID(as_uuid=True), ForeignKey("user_points.user_id"), nullable=False)
+    registered_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    active = Column(Boolean, default=True)
+    cost_points = Column(Integer, default=0)  # points paid for registration/renewal
+    verified = Column(Boolean, default=False)
+    # Relationship (optional)
+    owner = relationship("UserPoints", backref="registered_names")
