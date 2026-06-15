@@ -24,6 +24,23 @@ def get_user_points(session, user_id):
         session.commit()
     return user
 
+@points_bp.route('/username/<identifier>', methods=['GET'])
+def get_user_by_username(identifier):
+    # identifier can be UUID or username
+    session = get_db_session()
+    # Try UUID first
+    try:
+        user_uuid = uuid.UUID(identifier)
+        user = session.query(UserPoints).filter_by(user_id=user_uuid).first()
+    except:
+        user = session.query(UserPoints).filter_by(username=identifier).first()
+    if not user:
+        session.close()
+        return jsonify({'error': 'User not found'}), 404
+    session.close()
+    return jsonify({'user_id': str(user.user_id), 'username': user.username, 'balance': user.balance})
+
+
 # ------------------ Balance ------------------
 @points_bp.route('/balance', methods=['GET'])
 def balance():
@@ -74,13 +91,13 @@ def stake():
     session.add(log)
     session.commit()
 
-    stake_id = str(stake.id)          # <-- ADDED
+    stake_id = str(stake.id)
     session.close()
 
     return jsonify({
         'message': f'Staked {amount} points until {locked_until}',
         'apy': apy,
-        'stake_id': stake_id          # <-- ADDED
+        'stake_id': stake_id
     })
 
 # ------------------ Unstake ------------------
@@ -119,6 +136,47 @@ def unstake():
     session.commit()
     session.close()
     return jsonify({'message': f'Unstaked {stake.amount} points + {reward} reward', 'total': total_return})
+
+
+@points_bp.route('/username', methods=['POST'])
+def set_username():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    username = data.get('username')
+    if not user_id or not username:
+        return jsonify({'error': 'user_id and username required'}), 400
+    try:
+        user_uuid = uuid.UUID(user_id)   # <-- convert to UUID object
+    except:
+        return jsonify({'error': 'invalid user_id'}), 400
+    session = get_db_session()
+    # get_user_points expects a UUID object, not a string
+    user = get_user_points(session, user_uuid)
+    # Check uniqueness
+    existing = session.query(UserPoints).filter(UserPoints.username == username, UserPoints.user_id != user.user_id).first()
+    if existing:
+        session.close()
+        return jsonify({'error': 'Username already taken'}), 409
+    user.username = username
+    session.commit()
+    session.close()
+    return jsonify({'message': 'Username set', 'username': username}), 200
+
+@points_bp.route('/resolve/<identifier>', methods=['GET'])
+def resolve_user(identifier):
+    session = get_db_session()
+    try:
+        user_uuid = uuid.UUID(identifier)
+        user = session.query(UserPoints).filter_by(user_id=user_uuid).first()
+    except:
+        user = session.query(UserPoints).filter_by(username=identifier).first()
+    if not user:
+        session.close()
+        return jsonify({'error': 'User not found'}), 404
+    session.close()
+    return jsonify({'user_id': str(user.user_id), 'username': user.username, 'balance': user.balance})
+
+
 
 # ------------------ History ------------------
 @points_bp.route('/history', methods=['GET'])
@@ -175,7 +233,7 @@ def create_proposal():
     session = get_db_session()
     session.add(proposal)
     session.commit()
-    proposal_id = str(proposal.id)   # <-- ADDED
+    proposal_id = str(proposal.id)
     session.close()
     return jsonify({'message': 'Proposal created', 'id': proposal_id}), 201
 
@@ -241,13 +299,3 @@ def treasury_status():
         'total_staked': total_staked,
         'active_proposals': active_proposals
     })
-
-@points_bp.route('/branches/map', methods=['GET'])
-def branch_map():
-    branches = []
-    for b in os.listdir('.tvc/refs/heads/'):
-        commit_hash = open(f'.tvc/refs/heads/{b}').read().strip()
-        tree = tvc._get_tree_from_commit(commit_hash)
-        file_count = len(tree) if tree else 0
-        branches.append({'name': b, 'commit': commit_hash, 'file_count': file_count, 'current': b == tvc._get_current_branch()})
-    return jsonify(branches)
