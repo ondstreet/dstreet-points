@@ -220,16 +220,25 @@ def complete_bounty(bounty_id):
     return jsonify({'message': 'Bounty completed, points awarded'}), 200
 
 # ---------- User Stats ----------
-@community_bp.route('/stats/<user_id>', methods=['GET'])
-def get_user_stats(user_id):
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except:
-        return jsonify({'error': 'invalid user_id'}), 400
+@community_bp.route('/stats/<identifier>', methods=['GET'])
+def get_user_stats(identifier):
     session = get_db_session()
-    stats = session.query(UserCommunityStats).filter_by(user_id=user_uuid).first()
-    if not stats:
-        stats = UserCommunityStats(user_id=user_uuid)
+    # Try as UUID first
+    try:
+        user_uuid = uuid.UUID(identifier)
+        stats = session.query(UserCommunityStats).filter_by(user_id=user_uuid).first()
+        if not stats:
+            stats = UserCommunityStats(user_id=user_uuid)
+    except ValueError:
+        # Not a UUID – treat as username
+        from core.models.points import UserPoints
+        user = session.query(UserPoints).filter_by(username=identifier).first()
+        if not user:
+            session.close()
+            return jsonify({'error': 'User not found'}), 404
+        stats = session.query(UserCommunityStats).filter_by(user_id=user.user_id).first()
+        if not stats:
+            stats = UserCommunityStats(user_id=user.user_id)
     session.close()
     return jsonify({
         'bugs_reported': stats.bugs_reported,
