@@ -20,16 +20,13 @@ def dashboard():
 # Create database tables in the correct order
 with app.app_context():
     from sqlalchemy import create_engine
-    from core.models.points import Base as PointsBase
-    from core.models.community import Base as CommunityBase
+    from core.models.points import UserPoints, Stake, Proposal, Vote, RewardLog
+    from core.models.community import BugReport, Bounty, UserCommunityStats
 
     db_path = os.path.join(os.getcwd(), 'data', 'points.db')
     engine = create_engine(f'sqlite:///{db_path}')
-
-    # Points tables first (no foreign key dependencies)
-    PointsBase.metadata.create_all(engine)
-    # Community tables (depend on points tables)
-    CommunityBase.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
 
 if __name__ == '__main__':
     app.run()
+    
