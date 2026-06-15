@@ -1,44 +1,108 @@
-
 <!DOCTYPE html>
 <html>
-<head><title>Bounties - $STORE Community</title>
-<style>
-    body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
-    .bounty { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; }
-    .claim-btn { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; }
-</style>
+<head>
+    <title>💰 Bounties – $STORE Community</title>
+    <style>
+        body { font-family: system-ui; background: #f5f7fb; padding: 2rem; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        input, textarea, button { width: 100%; padding: 0.6rem; margin: 0.5rem 0; border-radius: 0.5rem; border: 1px solid #cbd5e1; }
+        button { background: #3b82f6; color: white; font-weight: bold; cursor: pointer; border: none; }
+        .bounty-item { border-bottom: 1px solid #e2e8f0; padding: 1rem 0; }
+        .flex { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    </style>
 </head>
 <body>
-<h1>💰 Open Bounties</h1>
-<div id="bounties-list">Loading...</div>
+<div class="container">
+    <div class="card">
+        <h1>💰 Community Bounties</h1>
+        <p>Create bounties (costs points) or claim open bounties to earn points.</p>
+    </div>
+
+    <div class="card">
+        <h2>➕ Create a Bounty</h2>
+        <input type="text" id="bountyTitle" placeholder="Bounty title">
+        <textarea id="bountyDesc" rows="2" placeholder="Description"></textarea>
+        <input type="number" id="bountyPointsReward" placeholder="Points reward" value="10">
+        <input type="text" id="creatorId" placeholder="Your user ID (UUID)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
+        <button onclick="createBounty()">Create Bounty (costs points)</button>
+        <div id="createResult"></div>
+    </div>
+
+    <div class="card">
+        <h2>📋 Open Bounties</h2>
+        <div id="bountiesList">Loading...</div>
+    </div>
+</div>
+
 <script>
+    const API = '/api/community';
+
     async function loadBounties() {
-        const res = await fetch('/api/community/bounties');
+        const res = await fetch(`${API}/bounties`);
         const bounties = await res.json();
-        const container = document.getElementById('bounties-list');
-        if (!bounties.length) { container.innerHTML = '<p>No open bounties.</p>'; return; }
+        const container = document.getElementById('bountiesList');
+        if (!bounties.length) {
+            container.innerHTML = '<p>No open bounties. Create one!</p>';
+            return;
+        }
         container.innerHTML = bounties.map(b => `
-            <div class="bounty">
-                <h3>${b.title}</h3>
-                <p>${b.description}</p>
-                <p><strong>Reward:</strong> ${b.points_reward} points</p>
-                <button class="claim-btn" data-id="${b.id}">Claim Bounty</button>
+            <div class="bounty-item">
+                <strong>${escapeHtml(b.title)}</strong>
+                <p>${escapeHtml(b.description)}</p>
+                <p>💰 Reward: ${b.points_reward} points</p>
+                <div class="flex">
+                    <button onclick="claimBounty('${b.id}')">Claim Bounty</button>
+                </div>
             </div>
         `).join('');
-        document.querySelectorAll('.claim-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const userId = prompt("Enter your user ID (UUID):");
-                if (!userId) return;
-                const res = await fetch(`/api/community/bounties/${btn.dataset.id}/claim`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId })
-                });
-                const data = await res.json();
-                alert(data.message || data.error);
-                if (res.ok) loadBounties();
-            });
+    }
+
+    async function createBounty() {
+        const title = document.getElementById('bountyTitle').value;
+        const description = document.getElementById('bountyDesc').value;
+        const pointsReward = parseInt(document.getElementById('bountyPointsReward').value) || 0;
+        const creatorId = document.getElementById('creatorId').value.trim();
+        if (!title || !description || pointsReward <= 0) return alert('Title, description, and positive points required');
+        const res = await fetch(`${API}/bounties`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creator_id: creatorId, title, description, points_reward: pointsReward })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert('Bounty created! Points deducted from your balance.');
+            document.getElementById('bountyTitle').value = '';
+            document.getElementById('bountyDesc').value = '';
+            loadBounties();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown'));
+        }
+    }
+
+    async function claimBounty(bountyId) {
+        const userId = prompt('Enter your user ID (UUID) to claim this bounty:');
+        if (!userId) return;
+        const res = await fetch(`${API}/bounties/${bountyId}/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        const data = await res.json();
+        alert(data.message || data.error);
+        if (res.ok) loadBounties();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
         });
     }
+
     loadBounties();
 </script>
 </body>
