@@ -1,7 +1,7 @@
 from flask import Flask, render_template
 from points_service.points_api import points_bp
-from core.api.feedback_api import feedback_api as feedback_bp
 from web.api.community_api import community_bp
+# from core.api.feedback_api import feedback_api as feedback_bp   # <-- COMMENT OUT
 import os
 
 app = Flask(__name__)
@@ -12,7 +12,7 @@ os.makedirs('data', exist_ok=True)
 # Register blueprints
 app.register_blueprint(points_bp)
 app.register_blueprint(community_bp, url_prefix='/api/community')
-app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
+# app.register_blueprint(feedback_bp, url_prefix='/api/feedback')   # <-- COMMENT OUT
 
 # ----- HTML page routes -----
 @app.route('/')
@@ -33,7 +33,7 @@ def community_dashboard():
     return render_template('community/dashboard.html')
 # ----------------------------
 
-# ----- Route printer that includes the development port -----
+# ----- Safe route printer (skips dynamic endpoints) -----
 def print_static_routes():
     BASE_URL = "http://127.0.0.1:5000"
     print("\n" + "="*70)
@@ -63,7 +63,7 @@ with app.app_context():
     from core.models.points import Base as PointsBase
     from core.models.community import Base as CommunityBase
     from core.models.points import UserPoints, Stake, Proposal, Vote, RewardLog
-    from core.models.community import BugReport, Bounty, UserCommunityStats
+    from core.models.community import BugReport, Bounty, UserCommunityStats, NameRegistry
 
     db_path = os.path.join(os.getcwd(), 'data', 'points.db')
     engine = create_engine(f'sqlite:///{db_path}')
