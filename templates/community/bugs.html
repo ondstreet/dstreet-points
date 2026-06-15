@@ -1,28 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Community Bug Tracker</title>
+    <title>🐞 Bug Tracker – $STORE Community</title>
     <style>
-        body { font-family: system-ui; background: #f5f7fb; padding: 2rem; }
-        .container { max-width: 1200px; margin: auto; }
-        .card { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fb; margin: 0; padding: 2rem; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        h1, h2 { margin-top: 0; color: #1e293b; }
+        input, textarea, select, button { width: 100%; padding: 0.6rem; margin-top: 0.5rem; margin-bottom: 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; }
+        button { background: #3b82f6; color: white; font-weight: 600; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #2563eb; }
         .bug-item { border-bottom: 1px solid #e2e8f0; padding: 1rem 0; }
         .status { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 1rem; font-size: 0.8rem; font-weight: bold; }
         .open { background: #dc2626; color: white; }
         .claimed { background: #f59e0b; color: white; }
         .fixed { background: #10b981; color: white; }
-        button { background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; }
-        button:hover { background: #2563eb; }
-        .severity { margin-left: 1rem; font-size: 0.8rem; }
+        .flex { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .flex button { width: auto; margin-bottom: 0; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🐞 Community Bug Tracker</h1>
     <div class="card">
-        <h2>Report a Bug</h2>
-        <input type="text" id="bugTitle" placeholder="Title">
-        <textarea id="bugDesc" rows="3" placeholder="Description"></textarea>
+        <h1>🐞 Community Bug Tracker</h1>
+        <p>Report bugs, claim bounties, and help improve the platform.</p>
+    </div>
+
+    <div class="card">
+        <h2>📝 Report a Bug</h2>
+        <input type="text" id="bugTitle" placeholder="Bug title">
+        <textarea id="bugDesc" rows="3" placeholder="Describe the bug..."></textarea>
         <select id="bugSeverity">
             <option value="low">Low</option>
             <option value="normal" selected>Normal</option>
@@ -30,72 +37,103 @@
             <option value="critical">Critical</option>
         </select>
         <input type="number" id="bountyPoints" placeholder="Bounty points (optional)" value="0">
+        <input type="text" id="reporterId" placeholder="Your user ID (UUID)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
         <button onclick="createBug()">Submit Bug</button>
+        <div id="createResult"></div>
     </div>
+
     <div class="card">
-        <h2>Open Bugs</h2>
+        <h2>📋 Open Bugs</h2>
         <div id="bugsList">Loading...</div>
     </div>
 </div>
+
 <script>
     const API = '/api/community';
-    const userId = '4beebdef-a359-4578-825c-0cfa9269fa66'; // Replace with actual logged-in user
+
     async function loadBugs() {
         const res = await fetch(`${API}/bugs`);
         const bugs = await res.json();
         const container = document.getElementById('bugsList');
-        if (bugs.length === 0) {
-            container.innerHTML = '<p>No bugs reported yet.</p>';
+        if (!bugs.length) {
+            container.innerHTML = '<p>✨ No open bugs. Be the first to report one!</p>';
             return;
         }
         container.innerHTML = bugs.map(bug => `
             <div class="bug-item">
-                <strong>${bug.title}</strong>
+                <strong>${escapeHtml(bug.title)}</strong>
                 <span class="status ${bug.status}">${bug.status}</span>
-                <span class="severity">Severity: ${bug.severity}</span>
-                <p>${bug.description}</p>
-                <p>Bounty: ${bug.bounty_points} points</p>
-                <button onclick="claimBug('${bug.id}')">Claim Fix</button>
-                <button onclick="resolveBug('${bug.id}')">Mark Fixed</button>
+                <span style="margin-left: 1rem;">Severity: ${bug.severity}</span>
+                <p>${escapeHtml(bug.description)}</p>
+                <p>💰 Bounty: ${bug.bounty_points} points</p>
+                <div class="flex">
+                    <button onclick="claimBug('${bug.id}')">Claim Fix</button>
+                    <button onclick="resolveBug('${bug.id}')">Mark Fixed</button>
+                </div>
             </div>
         `).join('');
     }
+
     async function createBug() {
         const title = document.getElementById('bugTitle').value;
         const description = document.getElementById('bugDesc').value;
         const severity = document.getElementById('bugSeverity').value;
         const bountyPoints = parseInt(document.getElementById('bountyPoints').value) || 0;
+        const userId = document.getElementById('reporterId').value.trim();
         if (!title || !description) return alert('Title and description required');
         const res = await fetch(`${API}/bugs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, title, description, severity, bounty_points: bountyPoints })
         });
+        const data = await res.json();
         if (res.ok) {
-            alert('Bug reported');
+            alert('Bug reported!');
+            document.getElementById('bugTitle').value = '';
+            document.getElementById('bugDesc').value = '';
+            document.getElementById('bountyPoints').value = '0';
             loadBugs();
         } else {
-            alert('Error');
+            alert('Error: ' + (data.error || 'Unknown'));
         }
     }
+
     async function claimBug(bugId) {
+        const userId = prompt('Enter your user ID (UUID) to claim this bug:');
+        if (!userId) return;
         const res = await fetch(`${API}/bugs/${bugId}/claim`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId })
         });
-        if (res.ok) { alert('Claimed!'); loadBugs(); }
-        else alert('Failed');
+        const data = await res.json();
+        alert(data.message || data.error);
+        if (res.ok) loadBugs();
     }
+
     async function resolveBug(bugId) {
+        const userId = prompt('Enter your user ID (UUID) that claimed this bug:');
+        if (!userId) return;
         const res = await fetch(`${API}/bugs/${bugId}/resolve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId })
         });
-        if (res.ok) { alert('Resolved!'); loadBugs(); }
-        else alert('Failed');
+        const data = await res.json();
+        alert(data.message || data.error);
+        if (res.ok) loadBugs();
     }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
     loadBugs();
 </script>
 </body>
