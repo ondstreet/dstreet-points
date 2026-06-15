@@ -17,9 +17,12 @@ app.register_blueprint(community_bp, url_prefix='/api/community')
 def dashboard():
     return render_template('points_dashboard.html')
 
-# Create database tables in the correct order
+# Create all database tables (points + community) in one go
 with app.app_context():
     from sqlalchemy import create_engine
+    from core.models.points import Base   # <-- Import the shared Base
+
+    # Force import all model classes to register them with Base
     from core.models.points import UserPoints, Stake, Proposal, Vote, RewardLog
     from core.models.community import BugReport, Bounty, UserCommunityStats
 
