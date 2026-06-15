@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from core.models.points import Base
+from core.models.community import NameRegistry
 import enum
 
 class BugStatus(enum.Enum):
