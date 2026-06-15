@@ -1,38 +1,52 @@
 <!DOCTYPE html>
 <html>
-<head><title>My Stats - $STORE Community</title>
-<style>
-    body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
-    .stats-card { background: #f3f4f6; padding: 1rem; border-radius: 0.5rem; }
-    input, button { padding: 0.5rem; margin: 0.5rem 0; }
-</style>
+<head>
+    <title>📊 My Stats – $STORE Community</title>
+    <style>
+        body { font-family: system-ui; background: #f5f7fb; padding: 2rem; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: white; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem; }
+        input, button { width: 100%; padding: 0.6rem; margin: 0.5rem 0; border-radius: 0.5rem; }
+        button { background: #3b82f6; color: white; border: none; cursor: pointer; font-weight: bold; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+        .stat { background: #f1f5f9; padding: 0.8rem; border-radius: 0.5rem; text-align: center; }
+    </style>
 </head>
 <body>
-<h1>📊 My Community Stats</h1>
-<div>
-    <label>Your User ID (UUID):</label>
-    <input type="text" id="userId" placeholder="e.g., 4beebdef-a359-4578-825c-0cfa9269fa66" style="width: 100%;">
-    <button onclick="loadStats()">Load Stats</button>
+<div class="container">
+    <div class="card">
+        <h1>📊 Community Stats Dashboard</h1>
+        <p>Enter your user ID to see your contribution stats.</p>
+        <input type="text" id="userId" placeholder="Your user ID (UUID)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
+        <button onclick="loadStats()">Load My Stats</button>
+        <div id="statsDisplay" style="margin-top: 1rem;"></div>
+    </div>
 </div>
-<div id="stats" class="stats-card">Enter your user ID to see stats.</div>
+
 <script>
+    const API = '/api/community';
+
     async function loadStats() {
         const userId = document.getElementById('userId').value.trim();
-        if (!userId) return;
-        const res = await fetch(`/api/community/stats/${userId}`);
+        if (!userId) return alert('Please enter a user ID');
+        const res = await fetch(`${API}/stats/${userId}`);
         const data = await res.json();
         if (res.ok) {
-            document.getElementById('stats').innerHTML = `
-                <p><strong>Bugs Reported:</strong> ${data.bugs_reported}</p>
-                <p><strong>Bugs Fixed:</strong> ${data.bugs_fixed}</p>
-                <p><strong>Bounties Claimed:</strong> ${data.bounties_claimed}</p>
-                <p><strong>Bounties Completed:</strong> ${data.bounties_completed}</p>
-                <p><strong>Reputation Score:</strong> ${data.reputation_score}</p>
-                <p><strong>Level:</strong> ${data.level}</p>
-                <p><strong>Badges:</strong> ${data.badges || 'None'}</p>
+            document.getElementById('statsDisplay').innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat"><strong>🐞 Bugs Reported</strong><br>${data.bugs_reported}</div>
+                    <div class="stat"><strong>✅ Bugs Fixed</strong><br>${data.bugs_fixed}</div>
+                    <div class="stat"><strong>💰 Bounties Claimed</strong><br>${data.bounties_claimed}</div>
+                    <div class="stat"><strong>🏆 Bounties Completed</strong><br>${data.bounties_completed}</div>
+                </div>
+                <div class="stat" style="margin-top: 1rem;">
+                    <strong>⭐ Reputation Score:</strong> ${data.reputation_score}<br>
+                    <strong>📈 Level:</strong> ${data.level}<br>
+                    <strong>🏅 Badges:</strong> ${data.badges || 'None'}
+                </div>
             `;
         } else {
-            document.getElementById('stats').innerHTML = `<p>Error: ${data.error}</p>`;
+            document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
         }
     }
 </script>
