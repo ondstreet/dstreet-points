@@ -1,7 +1,7 @@
 from flask import Flask, render_template
 from points_service.points_api import points_bp
 from web.api.community_api import community_bp
-# from core.api.feedback_api import feedback_api as feedback_bp   # <-- COMMENT OUT
+from core.api.feedback_api import feedback_api as feedback_bp
 import os
 
 app = Flask(__name__)
@@ -12,7 +12,7 @@ os.makedirs('data', exist_ok=True)
 # Register blueprints
 app.register_blueprint(points_bp)
 app.register_blueprint(community_bp, url_prefix='/api/community')
-# app.register_blueprint(feedback_bp, url_prefix='/api/feedback')   # <-- COMMENT OUT
+app.register_blueprint(feedback_bp)
 
 # ----- HTML page routes -----
 @app.route('/')
