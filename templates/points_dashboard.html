@@ -122,6 +122,89 @@
         <div id="proposalResult"></div>
     </div>
 
+
+    <!-- Inside the stats dashboard card, add a name input option -->
+    <div class="card">
+        <h1>📊 Community Stats Dashboard</h1>
+        <p>Enter your user ID or registered name to see your contribution stats.</p>
+        <input type="text" id="userId" placeholder="User ID or name (e.g., alice)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
+        <button onclick="loadStats()">Load My Stats</button>
+        <div id="statsDisplay" style="margin-top: 1rem;"></div>
+    </div>
+
+    <!-- Resolver widget (new) -->
+    <div class="card">
+        <h2>🔍 Resolve a Name</h2>
+        <input type="text" id="resolveName" placeholder="Enter a registered name (e.g., alice)">
+        <button onclick="resolveName()">Resolve</button>
+        <pre id="resolveResult"></pre>
+    </div>
+
+    <script>
+        const API = '/api/community';
+        const POINTS_API = '/api/points';
+
+        async function loadStats() {
+            let identifier = document.getElementById('userId').value.trim();
+            if (!identifier) return alert('Please enter a user ID or name');
+            // If identifier is not a UUID, try to resolve it to a user_id
+            let userId = identifier;
+            if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identifier)) {
+                // It's a name, resolve it
+                const res = await fetch(`${POINTS_API}/names/resolve/${identifier}`);
+                if (!res.ok) {
+                    document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Name not found or expired.</p>`;
+                    return;
+                }
+                const data = await res.json();
+                userId = data.owner_id;
+            }
+            const res = await fetch(`${API}/stats/${userId}`);
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('statsDisplay').innerHTML = `
+                    <div class="stats-grid">
+                        <div class="stat"><strong>🐞 Bugs Reported</strong><br>${data.bugs_reported}</div>
+                        <div class="stat"><strong>✅ Bugs Fixed</strong><br>${data.bugs_fixed}</div>
+                        <div class="stat"><strong>💰 Bounties Claimed</strong><br>${data.bounties_claimed}</div>
+                        <div class="stat"><strong>🏆 Bounties Completed</strong><br>${data.bounties_completed}</div>
+                    </div>
+                    <div class="stat" style="margin-top: 1rem;">
+                        <strong>⭐ Reputation Score:</strong> ${data.reputation_score}<br>
+                        <strong>📈 Level:</strong> ${data.level}<br>
+                        <strong>🏅 Badges:</strong> ${data.badges || 'None'}
+                    </div>
+                `;
+            } else {
+                document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+            }
+        }
+
+        async function resolveName() {
+            const name = document.getElementById('resolveName').value.trim();
+            if (!name) return alert('Enter a name');
+            const res = await fetch(`${POINTS_API}/names/resolve/${name}`);
+            const data = await res.json();
+            const pre = document.getElementById('resolveResult');
+            if (res.ok) {
+                pre.innerHTML = `Owner: ${data.owner_id}\nUsername: ${data.username || 'N/A'}\nExpires: ${new Date(data.expires_at).toLocaleDateString()}`;
+            } else {
+                pre.innerHTML = `Error: ${data.error}`;
+            }
+        }
+
+        // Also keep the original getUserId function for other widgets
+        function getUserId() {
+            return document.getElementById('userId').value.trim();
+        }
+
+        // Call loadStats on page load if you want
+        window.onload = () => {
+            // Optionally load stats for the default user
+            loadStats();
+        };
+    </script>
+
     <div class="card">
         <h2>🏷️ Name Registry</h2>
         <div>
@@ -179,6 +262,22 @@
         <button onclick="listMyNames()">List My Names</button>
         <pre id="myNamesList"></pre>
     </div>
+</div>
+
+<div class="card">
+    <h2>📊 User Stats</h2>
+    <input type="text" id="statsUserId" placeholder="User ID or name (e.g., alice)">
+    <button onclick="loadUserStats()">Load Stats</button>
+    <div id="statsDisplay"></div>
+</div>
+
+<div class="card">
+    <h2>🔍 Check Name Availability</h2>
+    <div class="inline-group">
+        <input type="text" id="checkNameInput" placeholder="Enter a name (alphanumeric, 3-20 chars)">
+        <button onclick="checkAvailability()">Check</button>
+    </div>
+    <div id="availabilityResult"></div>
 </div>
 
 <script>
@@ -404,6 +503,50 @@
             banner.className = 'card error';
             banner.innerHTML = `<strong>⚠️ Your name(s) expire soon:</strong> ${expiring.map(n => n.name).join(', ')}. <a href="/community/dashboard">Renew now</a>.`;
             document.body.prepend(banner);
+        }
+    }
+
+
+    async function loadUserStats() {
+        let identifier = document.getElementById('statsUserId').value.trim();
+        if (!identifier) return;
+        let userId = identifier;
+        // If not UUID, try to resolve
+        if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identifier)) {
+            const res = await fetch(`/api/points/names/resolve/${identifier}`);
+            if (!res.ok) {
+                document.getElementById('statsDisplay').innerHTML = '<p class="error">Name not found</p>';
+                return;
+            }
+            const data = await res.json();
+            userId = data.owner_id;
+        }
+        const res = await fetch(`/api/community/stats/${userId}`);
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('statsDisplay').innerHTML = `
+                <p>Bugs reported: ${data.bugs_reported}</p>
+                <p>Bugs fixed: ${data.bugs_fixed}</p>
+                <p>Bounties claimed: ${data.bounties_claimed}</p>
+                <p>Bounties completed: ${data.bounties_completed}</p>
+            `;
+        } else {
+            document.getElementById('statsDisplay').innerHTML = `<p class="error">${data.error}</p>`;
+        }
+    }
+
+    async function checkAvailability() {
+        const name = document.getElementById('checkNameInput').value.trim();
+        if (!name) return;
+        const res = await fetch(`/api/points/names/check/${name}`);
+        const data = await res.json();
+        const div = document.getElementById('availabilityResult');
+        if (res.ok && data.available) {
+            div.innerHTML = `<span class="success">✅ Available! Cost: ${data.cost_per_year} points/year</span>`;
+        } else if (res.ok && !data.available) {
+            div.innerHTML = `<span class="error">❌ Taken until ${new Date(data.expires_at).toLocaleDateString()}</span>`;
+        } else {
+            div.innerHTML = `<span class="error">❌ ${data.error}</span>`;
         }
     }
 
