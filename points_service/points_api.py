@@ -10,6 +10,7 @@ import re
 
 points_bp = Blueprint('points', __name__, url_prefix='/api/points')
 
+DOMAIN_EXTENSION = ".dst"
 
 # Reserved names blocklist
 RESERVED_NAMES = {
@@ -326,6 +327,9 @@ def register_name():
     user_id = data.get('user_id')
     name = data.get('name')
     years = int(data.get('years', 1))
+    expiry_date = expires_at.strftime('%Y-%m-%d')
+    lease_message = f"Name registered. You own '{name}{DOMAIN_EXTENSION}' until {expiry_date}. Renew before expiry to keep it. After expiry, the name becomes available to others."
+
 
     if not user_id or not name:
         return jsonify({'error': 'user_id and name required'}), 400
@@ -379,7 +383,12 @@ def register_name():
     session.commit()
     session.close()
 
-    return jsonify({'message': 'Name registered', 'name': name, 'expires_at': expires_at.isoformat()}), 201
+    return jsonify({
+        'message': lease_message,
+        'name': name,
+        'domain': f"{name}{DOMAIN_EXTENSION}",
+        'expires_at': expires_at.isoformat()
+    }), 201
 
 @points_bp.route('/names/dispute', methods=['POST'])
 def dispute_name():
@@ -523,10 +532,56 @@ def resolve_name(name):
     session.close()
     return jsonify({
         'name': registry.name,
+        'domain': f"{registry.name}{DOMAIN_EXTENSION}",
         'owner_id': str(registry.owner_id),
         'username': owner.username if owner else None,
-        'expires_at': registry.expires_at.isoformat()
+        'expires_at': registry.expires_at.isoformat(),
+        'resource': registry.resource
     })
+
+
+@points_bp.route('/names/resource/<name>', methods=['POST'])
+def set_name_resource(name):
+    """Set a resource (URL, IPFS, etc.) for a owned name."""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    resource = data.get('resource')
+    if not user_id or not resource:
+        return jsonify({'error': 'user_id and resource required'}), 400
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except:
+        return jsonify({'error': 'invalid user_id'}), 400
+    session = get_db_session()
+    registry = session.query(NameRegistry).filter_by(name=name, active=True).first()
+    if not registry or registry.expires_at < datetime.utcnow():
+        session.close()
+        return jsonify({'error': 'Name not found or expired'}), 404
+    if registry.owner_id != user_uuid:
+        session.close()
+        return jsonify({'error': 'You do not own this name'}), 403
+    registry.resource = resource
+    session.commit()
+    session.close()
+    return jsonify({
+        'message': f'Resource for {name}{DOMAIN_EXTENSION} updated',
+        'resource': resource
+    }), 200
+
+@points_bp.route('/names/redirect/<name>', methods=['GET'])
+def redirect_domain(name):
+    """Redirect to the resource associated with a name."""
+    session = get_db_session()
+    registry = session.query(NameRegistry).filter_by(name=name, active=True).first()
+    session.close()
+    if not registry or registry.expires_at < datetime.utcnow():
+        return "Domain not found or expired", 404
+    if registry.resource:
+        if registry.resource.startswith(('http://', 'https://', 'ipfs://', 'ipns://')):
+            return redirect(registry.resource)
+        else:
+            return f"Resource for {name}{DOMAIN_EXTENSION}: {registry.resource}", 200
+    return f"No resource set for {name}{DOMAIN_EXTENSION}", 200
 
 @points_bp.route('/names/owned/<user_id>', methods=['GET'])
 def list_owned_names(user_id):
