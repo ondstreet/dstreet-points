@@ -280,6 +280,22 @@
     <div id="availabilityResult"></div>
 </div>
 
+<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+    <h2>✨ Claim Your .dstreet Name ✨</h2>
+    <p>Get a human‑readable name (e.g., alice.dstreet) to represent your identity on Digital Street.</p>
+    <p>Pay with $STORE points – only 100 points per year. Set it to your website, portfolio, or IPFS site.</p>
+    <button onclick="document.getElementById('registerName').focus();" style="background: white; color: #764ba2;">Get Started</button>
+</div>
+
+<div class="card">
+    <h2>🔍 Search Availability</h2>
+    <div class="inline-group">
+        <input type="text" id="checkNameInput" placeholder="Enter a name (alphanumeric, 3-20 chars)">
+        <button onclick="checkAvailability()">Check</button>
+    </div>
+    <div id="availabilityResult"></div>
+</div>
+
 <script>
     const API_BASE = 'http://127.0.0.1:5000/api/points';
 
@@ -438,7 +454,6 @@
         }, 4000);
     }
 
-
     async function checkName() {
         const name = document.getElementById('checkName').value.trim();
         if (!name) return;
@@ -549,6 +564,7 @@
             div.innerHTML = `<span class="error">❌ ${data.error}</span>`;
         }
     }
+
 
     // Load balance and proposals on page load
     window.onload = () => {
