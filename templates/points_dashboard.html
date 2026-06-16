@@ -72,6 +72,18 @@
             border-radius: 0.4rem;
             font-size: 0.8rem;
         }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .stat {
+            background: #f1f5f9;
+            padding: 0.8rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -85,6 +97,15 @@
 
 <h1>🏦 $STORE Points System</h1>
 
+<!-- CTA Banner -->
+<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center;">
+    <h2>✨ Claim Your .dstreet Name ✨</h2>
+    <p>Get a human‑readable name like <strong>alice.dstreet</strong> to represent your identity on Digital Street.</p>
+    <p>Pay with $STORE points – only <strong>100 points per year</strong>. Set it to your website, portfolio, or IPFS site.</p>
+    <button onclick="focusRegisterName()" style="background: white; color: #764ba2; border: none; padding: 0.6rem 1.5rem; border-radius: 2rem; font-weight: bold; cursor: pointer;">🚀 Get Started</button>
+</div>
+
+<!-- User ID & Balance -->
 <div class="card">
     <label>👤 Your User ID (UUID)</label>
     <div class="inline-group">
@@ -94,6 +115,7 @@
     <div id="balanceDisplay" class="status"></div>
 </div>
 
+<!-- Main Grid -->
 <div class="grid">
     <!-- Stake -->
     <div class="card">
@@ -122,108 +144,6 @@
         <div id="proposalResult"></div>
     </div>
 
-
-    <!-- Inside the stats dashboard card, add a name input option -->
-    <div class="card">
-        <h1>📊 Community Stats Dashboard</h1>
-        <p>Enter your user ID or registered name to see your contribution stats.</p>
-        <input type="text" id="userId" placeholder="User ID or name (e.g., alice)" value="4beebdef-a359-4578-825c-0cfa9269fa66">
-        <button onclick="loadStats()">Load My Stats</button>
-        <div id="statsDisplay" style="margin-top: 1rem;"></div>
-    </div>
-
-    <!-- Resolver widget (new) -->
-    <div class="card">
-        <h2>🔍 Resolve a Name</h2>
-        <input type="text" id="resolveName" placeholder="Enter a registered name (e.g., alice)">
-        <button onclick="resolveName()">Resolve</button>
-        <pre id="resolveResult"></pre>
-    </div>
-
-    <script>
-        const API = '/api/community';
-        const POINTS_API = '/api/points';
-
-        async function loadStats() {
-            let identifier = document.getElementById('userId').value.trim();
-            if (!identifier) return alert('Please enter a user ID or name');
-            // If identifier is not a UUID, try to resolve it to a user_id
-            let userId = identifier;
-            if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identifier)) {
-                // It's a name, resolve it
-                const res = await fetch(`${POINTS_API}/names/resolve/${identifier}`);
-                if (!res.ok) {
-                    document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Name not found or expired.</p>`;
-                    return;
-                }
-                const data = await res.json();
-                userId = data.owner_id;
-            }
-            const res = await fetch(`${API}/stats/${userId}`);
-            const data = await res.json();
-            if (res.ok) {
-                document.getElementById('statsDisplay').innerHTML = `
-                    <div class="stats-grid">
-                        <div class="stat"><strong>🐞 Bugs Reported</strong><br>${data.bugs_reported}</div>
-                        <div class="stat"><strong>✅ Bugs Fixed</strong><br>${data.bugs_fixed}</div>
-                        <div class="stat"><strong>💰 Bounties Claimed</strong><br>${data.bounties_claimed}</div>
-                        <div class="stat"><strong>🏆 Bounties Completed</strong><br>${data.bounties_completed}</div>
-                    </div>
-                    <div class="stat" style="margin-top: 1rem;">
-                        <strong>⭐ Reputation Score:</strong> ${data.reputation_score}<br>
-                        <strong>📈 Level:</strong> ${data.level}<br>
-                        <strong>🏅 Badges:</strong> ${data.badges || 'None'}
-                    </div>
-                `;
-            } else {
-                document.getElementById('statsDisplay').innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
-            }
-        }
-
-        async function resolveName() {
-            const name = document.getElementById('resolveName').value.trim();
-            if (!name) return alert('Enter a name');
-            const res = await fetch(`${POINTS_API}/names/resolve/${name}`);
-            const data = await res.json();
-            const pre = document.getElementById('resolveResult');
-            if (res.ok) {
-                pre.innerHTML = `Owner: ${data.owner_id}\nUsername: ${data.username || 'N/A'}\nExpires: ${new Date(data.expires_at).toLocaleDateString()}`;
-            } else {
-                pre.innerHTML = `Error: ${data.error}`;
-            }
-        }
-
-        // Also keep the original getUserId function for other widgets
-        function getUserId() {
-            return document.getElementById('userId').value.trim();
-        }
-
-        // Call loadStats on page load if you want
-        window.onload = () => {
-            // Optionally load stats for the default user
-            loadStats();
-        };
-    </script>
-
-    <div class="card">
-        <h2>🏷️ Name Registry</h2>
-        <div>
-            <input type="text" id="checkName" placeholder="Check name availability">
-            <button onclick="checkName()">Check</button>
-            <span id="availabilityResult"></span>
-        </div>
-        <div>
-            <input type="text" id="registerName" placeholder="Name to register">
-            <input type="number" id="registerYears" value="1" min="1" max="10" style="width:80px;">
-            <button onclick="registerName()">Register (costs points)</button>
-            <div id="registerResult"></div>
-        </div>
-        <div>
-            <button onclick="listMyNames()">List My Names</button>
-            <pre id="myNamesList"></pre>
-        </div>
-    </div>
-
     <!-- Vote -->
     <div class="card">
         <h2>🗳️ Vote on Proposal</h2>
@@ -235,68 +155,61 @@
         <button onclick="vote()">Submit Vote</button>
         <div id="voteResult"></div>
     </div>
+
+    <!-- Name Registry: Check Availability -->
+    <div class="card">
+        <h2>🔍 Search Availability</h2>
+        <div class="inline-group">
+            <input type="text" id="checkNameInput" placeholder="Enter a name (3-20 alphanumeric/_)">
+            <button onclick="checkAvailability()">Check</button>
+        </div>
+        <div id="availabilityResult"></div>
+    </div>
+
+    <!-- Name Registry: Register -->
+    <div class="card">
+        <h2>🏷️ Register a .dstreet Name</h2>
+        <input type="text" id="registerName" placeholder="Name (e.g., alice)">
+        <input type="number" id="registerYears" value="1" min="1" max="10" style="width:80px;">
+        <button onclick="registerName()">Register (costs points)</button>
+        <div id="registerResult"></div>
+    </div>
+
+    <!-- Name Registry: Owned Names -->
+    <div class="card">
+        <h2>📋 My Owned Names</h2>
+        <button onclick="listMyNames()">Refresh</button>
+        <pre id="myNamesList"></pre>
+    </div>
+
+    <!-- Name Registry: Resolver -->
+    <div class="card">
+        <h2>🔍 Resolve a Name</h2>
+        <input type="text" id="resolveName" placeholder="Enter a registered name (e.g., alice)">
+        <button onclick="resolveName()">Resolve</button>
+        <pre id="resolveResult"></pre>
+    </div>
 </div>
 
+<!-- Active Proposals -->
 <div class="card">
     <h2>📋 Active Proposals</h2>
     <button onclick="listProposals()">Refresh Proposals</button>
     <pre id="proposalsList">Click refresh to load proposals</pre>
 </div>
 
-
-<!-- Name Registry Widget -->
+<!-- User Stats (Community) -->
 <div class="card">
-    <h2>🏷️ Name Registry</h2>
-    <div>
-        <input type="text" id="checkName" placeholder="Check name availability">
-        <button onclick="checkName()">Check</button>
-        <span id="availabilityResult"></span>
-    </div>
-    <div>
-        <input type="text" id="registerName" placeholder="Name to register">
-        <input type="number" id="registerYears" value="1" min="1" max="10" style="width:80px;">
-        <button onclick="registerName()">Register (costs points)</button>
-        <div id="registerResult"></div>
-    </div>
-    <div>
-        <button onclick="listMyNames()">List My Names</button>
-        <pre id="myNamesList"></pre>
-    </div>
-</div>
-
-<div class="card">
-    <h2>📊 User Stats</h2>
+    <h2>📊 Community Stats</h2>
     <input type="text" id="statsUserId" placeholder="User ID or name (e.g., alice)">
     <button onclick="loadUserStats()">Load Stats</button>
     <div id="statsDisplay"></div>
 </div>
 
-<div class="card">
-    <h2>🔍 Check Name Availability</h2>
-    <div class="inline-group">
-        <input type="text" id="checkNameInput" placeholder="Enter a name (alphanumeric, 3-20 chars)">
-        <button onclick="checkAvailability()">Check</button>
-    </div>
-    <div id="availabilityResult"></div>
-</div>
-
-<div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-    <h2>✨ Claim Your .dstreet Name ✨</h2>
-    <p>Get a human‑readable name (e.g., alice.dstreet) to represent your identity on Digital Street.</p>
-    <p>Pay with $STORE points – only 100 points per year. Set it to your website, portfolio, or IPFS site.</p>
-    <button onclick="document.getElementById('registerName').focus();" style="background: white; color: #764ba2;">Get Started</button>
-</div>
-
-<div class="card">
-    <h2>🔍 Search Availability</h2>
-    <div class="inline-group">
-        <input type="text" id="checkNameInput" placeholder="Enter a name (alphanumeric, 3-20 chars)">
-        <button onclick="checkAvailability()">Check</button>
-    </div>
-    <div id="availabilityResult"></div>
-</div>
-
 <script>
+    // --------------------------------------------------------------
+    // Points & Staking
+    // --------------------------------------------------------------
     const API_BASE = 'http://127.0.0.1:5000/api/points';
 
     function getUserId() {
@@ -316,7 +229,7 @@
                     <div>📅 Last claim: ${data.last_claim || 'never'}</div>
                 `;
             } else {
-                showError('balanceDisplay', data.error || 'Failed to fetch balance');
+                showError('balanceDisplay', data.error || 'Failed');
             }
         } catch (err) {
             showError('balanceDisplay', err.message);
@@ -327,9 +240,7 @@
         const userId = getUserId();
         const amount = parseFloat(document.getElementById('stakeAmount').value);
         const days = parseInt(document.getElementById('stakeDays').value);
-        if (!userId || isNaN(amount) || amount <= 0) {
-            return showError('stakeResult', 'Valid amount required');
-        }
+        if (!userId || isNaN(amount) || amount <= 0) return showError('stakeResult', 'Valid amount required');
         try {
             const res = await fetch(`${API_BASE}/stake`, {
                 method: 'POST',
@@ -344,7 +255,7 @@
                     html += `<div>🔑 Stake ID: <strong class="code-id">${data.stake_id}</strong></div>`;
                     document.getElementById('stakeId').value = data.stake_id;
                 } else {
-                    html += `<div class="error">⚠️ Warning: stake_id not returned by server. Update your /stake endpoint to include 'stake_id'.</div>`;
+                    html += `<div class="error">⚠️ Warning: stake_id not returned. Update /stake endpoint.</div>`;
                 }
                 document.getElementById('stakeResult').innerHTML = html;
                 fetchBalance();
@@ -433,44 +344,36 @@
             const res = await fetch(`${API_BASE}/governance/proposals`);
             const data = await res.json();
             if (res.ok) {
-                if (data.length === 0) {
-                    document.getElementById('proposalsList').innerText = 'No active proposals.';
-                } else {
-                    document.getElementById('proposalsList').innerHTML = JSON.stringify(data, null, 2);
-                }
+                if (data.length === 0) document.getElementById('proposalsList').innerText = 'No active proposals.';
+                else document.getElementById('proposalsList').innerHTML = JSON.stringify(data, null, 2);
             } else {
-                document.getElementById('proposalsList').innerText = 'Error loading proposals: ' + (data.error || 'Unknown');
+                document.getElementById('proposalsList').innerText = 'Error loading proposals';
             }
         } catch (err) {
             document.getElementById('proposalsList').innerText = err.message;
         }
     }
 
-    function showError(elementId, message) {
-        const el = document.getElementById(elementId);
-        el.innerHTML = `<div class="error">❌ ${message}</div>`;
-        setTimeout(() => {
-            if (el) el.innerHTML = '';
-        }, 4000);
-    }
-
-    async function checkName() {
-        const name = document.getElementById('checkName').value.trim();
+    // --------------------------------------------------------------
+    // Name Registry
+    // --------------------------------------------------------------
+    async function checkAvailability() {
+        const name = document.getElementById('checkNameInput').value.trim();
         if (!name) return;
         const res = await fetch(`/api/points/names/check/${name}`);
         const data = await res.json();
-        const span = document.getElementById('availabilityResult');
+        const div = document.getElementById('availabilityResult');
         if (res.ok && data.available) {
-            span.innerHTML = `✅ Available! Cost: ${data.cost_per_year} points/year`;
+            div.innerHTML = `<span class="success">✅ Available! Cost: ${data.cost_per_year} points/year</span>";
         } else if (res.ok && !data.available) {
-            span.innerHTML = `❌ Taken until ${new Date(data.expires_at).toLocaleDateString()}`;
+            div.innerHTML = `<span class="error">❌ Taken until ${new Date(data.expires_at).toLocaleDateString()}</span>`;
         } else {
-            span.innerHTML = `❌ Error: ${data.error}`;
+            div.innerHTML = `<span class="error">❌ ${data.error}</span>`;
         }
     }
 
     async function registerName() {
-        const userId = getUserId(); // reuse the function that gets the UUID from the input field
+        const userId = getUserId();
         const name = document.getElementById('registerName').value.trim();
         const years = parseInt(document.getElementById('registerYears').value);
         if (!name || !years) return alert('Name and years required');
@@ -485,7 +388,7 @@
             div.innerHTML = `<div class="success">✅ Registered "${name}" until ${new Date(data.expires_at).toLocaleDateString()}</div>`;
             document.getElementById('registerName').value = '';
             listMyNames();
-            fetchBalance(); // update balance (points deducted)
+            fetchBalance();
         } else {
             div.innerHTML = `<div class="error">❌ ${data.error}</div>`;
         }
@@ -503,30 +406,26 @@
         pre.innerHTML = names.map(n => `${n.name} (expires ${new Date(n.expires_at).toLocaleDateString()})`).join('\n');
     }
 
-
-    async function checkExpiringNames() {
-        const userId = getUserId();
-        const res = await fetch(`/api/points/names/owned/${userId}`);
-        const names = await res.json();
-        const expiring = names.filter(n => {
-            const expires = new Date(n.expires_at);
-            const daysLeft = (expires - new Date()) / (1000 * 3600 * 24);
-            return daysLeft <= 7 && daysLeft > 0;
-        });
-        if (expiring.length) {
-            const banner = document.createElement('div');
-            banner.className = 'card error';
-            banner.innerHTML = `<strong>⚠️ Your name(s) expire soon:</strong> ${expiring.map(n => n.name).join(', ')}. <a href="/community/dashboard">Renew now</a>.`;
-            document.body.prepend(banner);
+    async function resolveName() {
+        const name = document.getElementById('resolveName').value.trim();
+        if (!name) return alert('Enter a name');
+        const res = await fetch(`/api/points/names/resolve/${name}`);
+        const data = await res.json();
+        const pre = document.getElementById('resolveResult');
+        if (res.ok) {
+            pre.innerHTML = `Owner: ${data.owner_id}\nUsername: ${data.username || 'N/A'}\nExpires: ${new Date(data.expires_at).toLocaleDateString()}\nResource: ${data.resource || 'None'}`;
+        } else {
+            pre.innerHTML = `Error: ${data.error}`;
         }
     }
 
-
+    // --------------------------------------------------------------
+    // Community Stats (resolve UUID or name)
+    // --------------------------------------------------------------
     async function loadUserStats() {
         let identifier = document.getElementById('statsUserId').value.trim();
         if (!identifier) return;
         let userId = identifier;
-        // If not UUID, try to resolve
         if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identifier)) {
             const res = await fetch(`/api/points/names/resolve/${identifier}`);
             if (!res.ok) {
@@ -540,36 +439,55 @@
         const data = await res.json();
         if (res.ok) {
             document.getElementById('statsDisplay').innerHTML = `
-                <p>Bugs reported: ${data.bugs_reported}</p>
-                <p>Bugs fixed: ${data.bugs_fixed}</p>
-                <p>Bounties claimed: ${data.bounties_claimed}</p>
-                <p>Bounties completed: ${data.bounties_completed}</p>
+                <div class="stats-grid">
+                    <div class="stat"><strong>🐞 Bugs Reported</strong><br>${data.bugs_reported}</div>
+                    <div class="stat"><strong>✅ Bugs Fixed</strong><br>${data.bugs_fixed}</div>
+                    <div class="stat"><strong>💰 Bounties Claimed</strong><br>${data.bounties_claimed}</div>
+                    <div class="stat"><strong>🏆 Bounties Completed</strong><br>${data.bounties_completed}</div>
+                </div>
+                <div class="stat" style="margin-top:1rem;">
+                    <strong>⭐ Reputation Score:</strong> ${data.reputation_score}<br>
+                    <strong>📈 Level:</strong> ${data.level}<br>
+                    <strong>🏅 Badges:</strong> ${data.badges || 'None'}
+                </div>
             `;
         } else {
             document.getElementById('statsDisplay').innerHTML = `<p class="error">${data.error}</p>`;
         }
     }
 
-    async function checkAvailability() {
-        const name = document.getElementById('checkNameInput').value.trim();
-        if (!name) return;
-        const res = await fetch(`/api/points/names/check/${name}`);
-        const data = await res.json();
-        const div = document.getElementById('availabilityResult');
-        if (res.ok && data.available) {
-            div.innerHTML = `<span class="success">✅ Available! Cost: ${data.cost_per_year} points/year</span>`;
-        } else if (res.ok && !data.available) {
-            div.innerHTML = `<span class="error">❌ Taken until ${new Date(data.expires_at).toLocaleDateString()}</span>`;
-        } else {
-            div.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+    // Expiring names warning (optional)
+    async function checkExpiringNames() {
+        const userId = getUserId();
+        const res = await fetch(`/api/points/names/owned/${userId}`);
+        const names = await res.json();
+        const expiring = names.filter(n => {
+            const daysLeft = (new Date(n.expires_at) - new Date()) / (1000 * 3600 * 24);
+            return daysLeft <= 7 && daysLeft > 0;
+        });
+        if (expiring.length) {
+            const banner = document.createElement('div');
+            banner.className = 'card error';
+            banner.innerHTML = `<strong>⚠️ Your name(s) expire soon:</strong> ${expiring.map(n => n.name).join(', ')}. <a href="/community/dashboard">Renew now</a>.`;
+            document.body.prepend(banner);
         }
     }
 
+    function focusRegisterName() {
+        document.getElementById('registerName').focus();
+    }
 
-    // Load balance and proposals on page load
+    function showError(elementId, message) {
+        const el = document.getElementById(elementId);
+        el.innerHTML = `<div class="error">❌ ${message}</div>`;
+        setTimeout(() => { if (el) el.innerHTML = ''; }, 4000);
+    }
+
+    // Load data on page load
     window.onload = () => {
         fetchBalance();
         listProposals();
+        checkExpiringNames();
     };
 </script>
 </body>
